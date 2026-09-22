@@ -2,8 +2,8 @@ import { useEffect, useRef } from "react";
 import { HashRouter, Route, Routes, useNavigate } from "react-router";
 import { AlertTriangle } from "lucide-react";
 import { useAuth } from "./hooks/useAuth";
-import { useItems, useProfile, useSessions, markNotificationOpened } from "./lib/api";
-import { replanNotifications } from "./lib/notifications";
+import { useItems, useProfile, useSessions, useSetStatus, markNotificationOpened } from "./lib/api";
+import { replanNotifications, snoozeNotification } from "./lib/notifications";
 import { installShareBridge } from "./lib/share";
 import { isTauri } from "./lib/platform";
 import { getPref, setPref } from "./lib/store";
@@ -71,6 +71,7 @@ function Background() {
   const items = useItems();
   const sessions = useSessions(30);
   const { coach } = useCoach(false);
+  const setStatus = useSetStatus();
   const nav = useNavigate();
   // Persisted (survives cold starts, unlike a ref) so reopening the app the same day never
   // re-plans. Settings changes replan directly via their own save handler, independent of this.
@@ -98,13 +99,19 @@ function Background() {
     let off: (() => void) | undefined;
     import("@tauri-apps/plugin-notification").then(({ onAction }) => {
       onAction((n) => {
-        void markNotificationOpened(n.title);
-        const itemId = (n.extra as { itemId?: string } | undefined)?.itemId;
+        // The plugin's TS types don't declare `actionId`, but the native side always sends it -
+        // "tap" for the notification body itself, or the pressed action button's own id.
+        const payload = n as typeof n & { actionId?: string };
+        const itemId = (payload.extra as { itemId?: string } | undefined)?.itemId || null;
+        void markNotificationOpened(payload.title);
+
+        if (payload.actionId === "skip" && itemId) { void setStatus(itemId, "skipped"); return; }
+        if (payload.actionId === "snooze") { void snoozeNotification(payload.title, payload.body ?? "", itemId); return; }
         nav(itemId ? `/item/${itemId}` : "/");
       }).then((l) => { off = () => l.unregister(); });
     }).catch(() => {});
     return () => off?.();
-  }, [nav]);
+  }, [nav, setStatus]);
 
   return null;
 }

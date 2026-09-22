@@ -1,5 +1,6 @@
 import {
-  cancelAll, createChannel, Importance, isPermissionGranted, requestPermission, Schedule, sendNotification, Visibility,
+  cancelAll, createChannel, Importance, isPermissionGranted, registerActionTypes, requestPermission,
+  Schedule, sendNotification, Visibility,
 } from "@tauri-apps/plugin-notification";
 import { isAndroid, isMobile, isTauri } from "./platform";
 import { DEFAULT_NOTIFICATIONS } from "./config";
@@ -10,6 +11,11 @@ import type { CoachResult, Item, LearningSession, NotificationSettings, Profile 
 
 const CHANNEL = "upwise-nudges";
 let desktopTimers: number[] = [];
+// "Mark done" is deliberately NOT a quick action here: completing an item always asks for an
+// honest time estimate (see ItemDetail's FinishPromptSheet) - a one-tap background "done" from
+// the lock screen would just reintroduce the exact zero-effort-completion problem that fixed.
+// Skip and snooze are safe to do silently since neither fabricates a time claim.
+export const NUDGE_ACTIONS = "nudge-actions";
 
 export async function ensurePermission(): Promise<boolean> {
   if (!isTauri) return false;
@@ -33,6 +39,15 @@ async function ensureChannel() {
       vibration: true,
     });
   } catch { /* already exists */ }
+  try {
+    await registerActionTypes([{
+      id: NUDGE_ACTIONS,
+      actions: [
+        { id: "skip", title: "Skip" },
+        { id: "snooze", title: "Snooze 1h" },
+      ],
+    }]);
+  } catch { /* already registered */ }
 }
 
 export function settingsOf(profile: Profile | undefined): NotificationSettings {
@@ -120,6 +135,7 @@ export async function replanNotifications({ profile, items, sessions, coach }: P
       if (isMobile()) {
         sendNotification({
           id, channelId: CHANNEL, title: n.title, body: n.body,
+          actionTypeId: n.itemId ? NUDGE_ACTIONS : undefined,
           schedule: Schedule.at(at, false, true), extra: { itemId: n.itemId ?? "" }, autoCancel: true,
         });
       } else {
@@ -131,6 +147,21 @@ export async function replanNotifications({ profile, items, sessions, coach }: P
     }
   }
   return scheduled;
+}
+
+/** Re-fires the same nudge ~1h later. Uses a separate id range from replanNotifications'
+ * deterministic (1000+) slots so a snooze never collides with or gets wiped by the next replan. */
+export async function snoozeNotification(title: string, body: string, itemId: string | null) {
+  if (!isMobile()) return;
+  await ensureChannel();
+  const at = new Date(Date.now() + 60 * 60_000);
+  const id = 900 + Math.floor(Math.random() * 90);
+  sendNotification({
+    id, channelId: CHANNEL, title, body,
+    actionTypeId: itemId ? NUDGE_ACTIONS : undefined,
+    schedule: Schedule.at(at, false, true), extra: { itemId: itemId ?? "" }, autoCancel: true,
+  });
+  void logNotification({ item_id: itemId, kind: "snooze", title, body, scheduled_for: at.toISOString() });
 }
 
 export async function sendTestNotification() {
