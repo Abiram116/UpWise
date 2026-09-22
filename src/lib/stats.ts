@@ -1,5 +1,5 @@
 import type { DailyActivity, Item, LearningSession } from "./types";
-import { isoDay } from "./utils";
+import { isoDay, pluralize } from "./utils";
 
 export interface HeatCell { day: string; level: 0 | 1 | 2 | 3 | 4; minutes: number; completed: number }
 
@@ -113,6 +113,39 @@ export function byCategory(items: Item[], sessions: LearningSession[]): Category
     }
   }
   return [...map.values()].sort((a, b) => b.completed + b.pending - (a.completed + a.pending));
+}
+
+export interface SkillGroup { category: string; completed: number; minutes: number; concepts: string[] }
+
+/** Completed items grouped by category with deduplicated AI-extracted concepts — the raw material for a resume/portfolio export. */
+export function skillsSummary(items: Item[], sessions: LearningSession[]): SkillGroup[] {
+  const secondsByItem = new Map<string, number>();
+  for (const s of sessions) if (s.item_id) secondsByItem.set(s.item_id, (secondsByItem.get(s.item_id) ?? 0) + s.seconds);
+  const map = new Map<string, SkillGroup>();
+  for (const i of items) {
+    if (i.status !== "completed") continue;
+    const name = i.category?.name ?? "Uncategorized";
+    const g = map.get(name) ?? { category: name, completed: 0, minutes: 0, concepts: [] };
+    g.completed++;
+    g.minutes += Math.round((secondsByItem.get(i.id) ?? 0) / 60);
+    for (const c of i.ai?.key_concepts ?? []) {
+      const norm = c.trim();
+      if (norm && !g.concepts.some((x) => x.toLowerCase() === norm.toLowerCase())) g.concepts.push(norm);
+    }
+    map.set(name, g);
+  }
+  return [...map.values()].sort((a, b) => b.completed - a.completed);
+}
+
+export function formatSkillsExport(groups: SkillGroup[], goal: string, name?: string | null): string {
+  const header = `${name ? `${name} — ` : ""}${goal} Learning Summary\nGenerated ${new Date().toLocaleDateString(undefined, { year: "numeric", month: "long", day: "numeric" })}`;
+  if (!groups.length) return `${header}\n\nNothing completed yet.`;
+  const body = groups.map((g) => {
+    const time = g.minutes >= 60 ? `${(g.minutes / 60).toFixed(1)}h` : `${g.minutes}min`;
+    const concepts = g.concepts.length ? `\nKey concepts: ${g.concepts.join(", ")}` : "";
+    return `${g.category} (${pluralize(g.completed, "item")} completed, ${time})${concepts}`;
+  }).join("\n\n");
+  return `${header}\n\n${body}`;
 }
 
 export function todayMinutes(activity: DailyActivity[]): number {

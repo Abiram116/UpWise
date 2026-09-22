@@ -1,10 +1,11 @@
-import { useEffect, useState } from "react";
-import { Bell, ChevronRight, Download, Moon, RefreshCw, Target, User } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
+import { Bell, ChevronRight, Copy, Download, FileText, Moon, RefreshCw, Target, User } from "lucide-react";
 import { useCategories, useProfile, useUpdateProfile, useItems, useSessions } from "../lib/api";
 import { replanNotifications, sendTestNotification, settingsOf } from "../lib/notifications";
 import { checkForUpdate, currentVersion, type UpdateInfo } from "../lib/updater";
 import { isTauri, platform } from "../lib/platform";
 import { applyTheme, type Theme } from "../theme";
+import { formatSkillsExport, skillsSummary } from "../lib/stats";
 import { useCoach } from "./Home";
 import { Chip, Page, Pill, Rise, Segmented, Sheet, Switch, useToast } from "../components/ui";
 
@@ -24,9 +25,16 @@ export function SettingsScreen() {
   const [checking, setChecking] = useState(false);
   const [progress, setProgress] = useState<number | null>(null);
   const [goalOpen, setGoalOpen] = useState(false);
+  const [exportOpen, setExportOpen] = useState(false);
   const [theme, setTheme] = useState<Theme>((localStorage.getItem("upwise:theme") as Theme) || "system");
 
   useEffect(() => { currentVersion().then(setVersion); }, []);
+
+  const sessionsAll = useSessions(365); // export should cover everything completed, not just the last 30 days
+  const skillsText = useMemo(() => {
+    if (!items.data || !sessionsAll.data || !profile.data) return "";
+    return formatSkillsExport(skillsSummary(items.data, sessionsAll.data), profile.data.goal, profile.data.display_name);
+  }, [items.data, sessionsAll.data, profile.data]);
 
   const p = profile.data;
   const s = settingsOf(p);
@@ -108,6 +116,14 @@ export function SettingsScreen() {
         )}
       </Group>
 
+      <Group title="Export" hint="A summary of what you've learned, by area — for a resume or LinkedIn.">
+        <button className="setting" onClick={() => setExportOpen(true)}>
+          <span className="setting-icon"><FileText size={18} /></span>
+          <div className="grow"><div className="title-sm">Skills summary</div><div className="meta">Grouped by area, ready to copy</div></div>
+          <ChevronRight size={18} className="meta" />
+        </button>
+      </Group>
+
       <Group title="App">
         <button className="setting" onClick={doCheck} disabled={checking || !isTauri}>
           <span className="setting-icon"><Download size={18} /></span>
@@ -118,6 +134,20 @@ export function SettingsScreen() {
 
       <Sheet open={goalOpen} onClose={() => setGoalOpen(false)} title="Your goal">
         <GoalEditor profile={p} onSave={async (goal, interests, name) => { await update.mutateAsync({ goal, interests, display_name: name }); setGoalOpen(false); toast("Saved"); }} />
+      </Sheet>
+
+      <Sheet open={exportOpen} onClose={() => setExportOpen(false)} title="Skills summary">
+        <div className="col" style={{ gap: 14 }}>
+          <pre className="body selectable" style={{ whiteSpace: "pre-wrap", fontFamily: "inherit", maxHeight: 360, overflow: "auto", margin: 0, background: "var(--surface-mid)", borderRadius: 16, padding: 16 }}>
+            {skillsText || "Nothing completed yet — finish a few items and come back."}
+          </pre>
+          <Pill variant="filled" size="lg" disabled={!skillsText} onClick={async () => {
+            try { await navigator.clipboard.writeText(skillsText); toast("Copied"); }
+            catch { toast("Couldn't copy automatically — select the text above manually"); }
+          }}>
+            <Copy size={16} /> Copy to clipboard
+          </Pill>
+        </div>
       </Sheet>
 
       <Sheet open={!!upd && upd !== "none"} onClose={() => setUpd(null)} title={`Update to v${upd !== "none" && upd ? upd.version : ""}`}>
