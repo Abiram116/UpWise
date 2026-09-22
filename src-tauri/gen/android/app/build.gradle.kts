@@ -13,6 +13,17 @@ val tauriProperties = Properties().apply {
     }
 }
 
+// Release signing: reads keystore.properties from $UPWISE_KEYSTORE_PROPERTIES, ./keystore.properties,
+// or ~/.upwise-keys/keystore.properties. Same key every release so Android allows in-place updates.
+val keystoreProperties = Properties().apply {
+    val candidates = listOfNotNull(
+        System.getenv("UPWISE_KEYSTORE_PROPERTIES")?.let { file(it) },
+        file("keystore.properties"),
+        file(System.getProperty("user.home") + "/.upwise-keys/keystore.properties"),
+    )
+    candidates.firstOrNull { it.exists() }?.inputStream()?.use { load(it) }
+}
+
 android {
     compileSdk = 36
     namespace = "com.abiram.upwise"
@@ -23,6 +34,16 @@ android {
         targetSdk = 36
         versionCode = tauriProperties.getProperty("tauri.android.versionCode", "1").toInt()
         versionName = tauriProperties.getProperty("tauri.android.versionName", "1.0")
+    }
+    signingConfigs {
+        create("release") {
+            if (keystoreProperties.containsKey("storeFile")) {
+                storeFile = file(keystoreProperties["storeFile"] as String)
+                storePassword = keystoreProperties["storePassword"] as String
+                keyAlias = keystoreProperties["keyAlias"] as String
+                keyPassword = keystoreProperties["keyPassword"] as String
+            }
+        }
     }
     buildTypes {
         getByName("debug") {
@@ -37,6 +58,7 @@ android {
             }
         }
         getByName("release") {
+            if (keystoreProperties.containsKey("storeFile")) signingConfig = signingConfigs.getByName("release")
             isMinifyEnabled = true
             proguardFiles(
                 *fileTree(".") { include("**/*.pro") }

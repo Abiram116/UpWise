@@ -1,0 +1,112 @@
+/* UpWise tonal system — Pixel Recorder rendition of Material You.
+   Surfaces step by tone, never by border. One accent (sage), one warm (apricot). */
+:root {
+  color-scheme: light dark;
+
+  --font: "Figtree Variable", -apple-system, "Segoe UI Variable Text", "Segoe UI", Roboto, system-ui, sans-serif;
+
+  /* light: soft warm-neutral, daylight desk */
+  --surface: #f8f6f2;
+  --surface-low: #f1eee8;
+  --surface-mid: #eae6df;
+  --surface-high: #e2ded6;
+  --surface-bright: #ffffff;
+  --on-surface: #1c1b1a;
+  --on-surface-2: #57544f;
+  --on-surface-3: #67635d;
+  --hairline: rgba(28, 27, 26, 0.08);
+
+  --primary: #2f6a52;
+  --on-primary: #ffffff;
+  --primary-container: #cfe7da;
+  --on-primary-container: #0f3325;
+  --warm: #9a5b2a;
+  --warm-container: #f5dcc4;
+  --on-warm-container: #4a2a10;
+  --error: #b3261e;
+  --error-container: #f9dedc;
+  --on-error-container: #410e0b;
+  --inverse-surface: #2f2e2c;
+  --inverse-on-surface: #f3f0eb;
+
+  --shadow-float: 0 8px 28px rgba(28, 27, 26, 0.14), 0 2px 6px rgba(28, 27, 26, 0.08);
+
+  /* shape */
+  --r-slab: 28px;
+  --r-thumb: 14px;
+  --r-sheet: 32px;
+  --r-pill: 999px;
+
+  /* rhythm */
+  --s-1: 4px; --s-2: 8px; --s-3: 12px; --s-4: 16px; --s-5: 20px; --s-6: 24px; --s-7: 32px; --s-8: 40px; --s-9: 56px;
+  --gutter: 20px;
+  --nav-h: 80px;
+  --rail-w: 88px;
+  --titlebar-h: 0px;
+  --content-max: 680px;
+
+  --spring: cubic-bezier(0.2, 0, 0, 1);
+  --out: cubic-bezier(0.05, 0.7, 0.1, 1);
+  --dur-fast: 150ms;
+  --dur: 240ms;
+  --dur-slow: 400ms;
+
+  --safe-top: env(safe-area-inset-top, 0px);
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --surface: #131315;
+    --surface-low: #1a1a1d;
+    --surface-mid: #202024;
+    --surface-high: #28282d;
+    --surface-bright: #34343a;
+    --on-surface: #e8e5e9;
+    --on-surface-2: #b3b0b6;
+    --on-surface-3: #9b98a1;
+    --hairline: rgba(232, 229, 233, 0.08);
+
+    --primary: #a9d8c0;
+    --on-primary: #0c2a1d;
+    --primary-container: #294a3b;
+    --on-primary-container: #cbe9d8;
+    --warm: #ebbf95;
+    --warm-container: #46321f;
+    --on-warm-container: #f7dcc0;
+    --error: #f2b8b5;
+    --error-container: #5a2725;
+    --on-error-container: #f9dedc;
+    --inverse-surface: #e8e5e9;
+    --inverse-on-surface: #1c1b1e;
+
+    --shadow-float: 0 12px 32px rgba(0, 0, 0, 0.45), 0 2px 8px rgba(0, 0, 0, 0.3);
+  }
+}
+
+:root[data-theme="dark"] {
+  --surface: #131315;
+  --surface-low: #1a1a1d;
+  --surface-mid: #202024;
+  --surface-high: #28282d;
+  --surface-bright: #34343a;
+  --on-surface: #e8e5e9;
+  --on-surface-2: #b3b0b6;
+  --on-surface-3: #9b98a1;
+  --hairline: rgba(232, 229, 233, 0.08);
+
+  --primary: #a9d8c0;
+  --on-primary: #0c2a1d;
+  --primary-container: #294a3b;
+  --on-primary-container: #cbe9d8;
+  --warm: #ebbf95;
+  --warm-container: #46321f;
+  --on-warm-container: #f7dcc0;
+  --error: #f2b8b5;
+  --error-container: #5a2725;
+  --on-error-container: #f9dedc;
+  --inverse-surface: #e8e5e9;
+  --inverse-on-surface: #1c1b1e;
+
+  --shadow-float: 0 12px 32px rgba(0, 0, 0, 0.45), 0 2px 8px rgba(0, 0, 0, 0.3);
+}

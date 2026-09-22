@@ -1,0 +1,276 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-09-22T00:00:00.000Z",
+  "title": "Design System: UpWise",
+  "extensions": {
+    "colorMeta": {
+      "primary": {
+        "role": "primary",
+        "displayName": "Forest Sage",
+        "canonical": "#2f6a52",
+        "dark": "#a9d8c0",
+        "tonalRamp": ["#0c2a1d", "#0f3325", "#1c4534", "#294a3b", "#2f6a52", "#5c9a7e", "#a9d8c0", "#cfe7da"]
+      },
+      "primary-container": {
+        "role": "primary",
+        "displayName": "Sage Container",
+        "canonical": "#cfe7da",
+        "dark": "#294a3b",
+        "tonalRamp": ["#0f3325", "#1c4534", "#294a3b", "#3d6450", "#5c9a7e", "#a9d8c0", "#cfe7da", "#e6f2eb"]
+      },
+      "warm": {
+        "role": "secondary",
+        "displayName": "Kiln Apricot",
+        "canonical": "#9a5b2a",
+        "dark": "#ebbf95",
+        "tonalRamp": ["#2a1a0a", "#46321f", "#4a2a10", "#75431f", "#9a5b2a", "#c48f5d", "#ebbf95", "#f5dcc4"]
+      },
+      "warm-container": {
+        "role": "secondary",
+        "displayName": "Apricot Container",
+        "canonical": "#f5dcc4",
+        "dark": "#46321f",
+        "tonalRamp": ["#2a1a0a", "#46321f", "#5e452c", "#8a6540", "#c48f5d", "#ebbf95", "#f5dcc4", "#faeee0"]
+      },
+      "error": {
+        "role": "tertiary",
+        "displayName": "Ember Red",
+        "canonical": "#b3261e",
+        "dark": "#f2b8b5",
+        "tonalRamp": ["#410e0b", "#5a2725", "#7a1913", "#b3261e", "#d1544c", "#f2b8b5", "#f9dedc", "#fdf0ef"]
+      },
+      "surface": {
+        "role": "neutral",
+        "displayName": "Daylight Desk",
+        "canonical": "#f8f6f2",
+        "dark": "#131315",
+        "tonalRamp": ["#131315", "#1a1a1d", "#202024", "#28282d", "#34343a", "#eae6df", "#f1eee8", "#f8f6f2"],
+        "note": "The structural ramp, not a palette. Light: surface #f8f6f2, surface-low #f1eee8, surface-mid #eae6df, surface-high #e2ded6, surface-bright #ffffff. Dark: #131315, #1a1a1d, #202024, #28282d, #34343a."
+      },
+      "on-surface": {
+        "role": "neutral",
+        "displayName": "Ink",
+        "canonical": "#1c1b1a",
+        "dark": "#e8e5e9",
+        "tonalRamp": ["#1c1b1a", "#2f2e2c", "#47443f", "#57544f", "#67635d", "#9b98a1", "#b3b0b6", "#e8e5e9"]
+      },
+      "inverse-surface": {
+        "role": "neutral",
+        "displayName": "Inverse",
+        "canonical": "#2f2e2c",
+        "dark": "#e8e5e9",
+        "tonalRamp": ["#1c1b1e", "#2f2e2c", "#47443f", "#67635d", "#9b98a1", "#c9c6c1", "#e8e5e9", "#f3f0eb"],
+        "note": "Snackbar only. The one place the theme flips."
+      }
+    },
+    "typographyMeta": {
+      "display": { "displayName": "Display", "purpose": "One sentence per screen, first in the column. 44px at >=840px. Never two on a page." },
+      "headline": { "displayName": "Headline", "purpose": "The Up-next title inside the slab; Progress numbers set as a sentence. 30px at >=840px; the single most important title also takes .focal (36px, desktop only)." },
+      "headline-sm": { "displayName": "Headline Small", "purpose": "Sheet titles, result titles, empty and error state titles." },
+      "title": { "displayName": "Title", "purpose": "Section leads inside detail blocks." },
+      "title-sm": { "displayName": "Title Small", "purpose": "The quiet label above a list: Today, In progress, Backlog." },
+      "body": { "displayName": "Body", "purpose": "Default prose in --on-surface-2." },
+      "body-lg": { "displayName": "Body Large", "purpose": "The coach sentence and the takeaway. The only copy written to be read slowly." },
+      "meta": { "displayName": "Meta", "purpose": "The facts line under a title: category, minutes, relevance dots, relative time. --on-surface-3." },
+      "section-title": { "displayName": "Section Title", "purpose": "A quiet label inside a form group. Sentence case, never uppercased." }
+    },
+    "shadows": [
+      {
+        "name": "float",
+        "value": "0 8px 28px rgba(28, 27, 26, 0.14), 0 2px 6px rgba(28, 27, 26, 0.08)",
+        "valueDark": "0 12px 32px rgba(0, 0, 0, 0.45), 0 2px 8px rgba(0, 0, 0, 0.3)",
+        "purpose": "The only shadow in the system. Applied to fixed elements that overlap scrolling content: the FAB, the live session pill, the snackbar, and the rail FAB on hover. Never on slabs, rows, inputs, chips, sheets, navbar or rail."
+      },
+      {
+        "name": "focus-ring-inset",
+        "value": "0 0 0 2px var(--primary) inset",
+        "purpose": "Focused text input. Preserves the capsule shape where an outline would not."
+      },
+      {
+        "name": "switch-track-off",
+        "value": "inset 0 0 0 2px var(--on-surface-3)",
+        "purpose": "The off-state switch track. The only other stroke-like treatment in the build; removed entirely when on."
+      },
+      {
+        "name": "scrim",
+        "value": "rgba(0, 0, 0, 0.42)",
+        "purpose": "Full-bleed behind a sheet or dialog. No blur, no backdrop-filter anywhere in the system."
+      }
+    ],
+    "motion": [
+      { "name": "spring", "value": "cubic-bezier(0.2, 0, 0, 1)", "purpose": "CSS transforms: switch thumb, progress dots, chevron rotation." },
+      { "name": "out", "value": "cubic-bezier(0.05, 0.7, 0.1, 1)", "purpose": "Material emphasised-decelerate. Everything that enters or changes colour: pills, chips, rows, ripple, shimmer." },
+      { "name": "dur-fast", "value": "150ms", "purpose": "Colour changes and state layers." },
+      { "name": "dur", "value": "240ms", "purpose": "Shape and transform changes." },
+      { "name": "dur-slow", "value": "400ms", "purpose": "Declared for the slowest tier." },
+      { "name": "js-spring", "value": "{ type: 'spring', stiffness: 420, damping: 36, mass: 0.8 }", "purpose": "The default motion/react transition: layout, the shared-layoutId nav indicator, taps, the snackbar, the live pill." },
+      { "name": "js-springSoft", "value": "{ type: 'spring', stiffness: 260, damping: 30 }", "purpose": "The gentler spring, exported from ui.tsx as the softer option." },
+      { "name": "js-easeOut", "value": "{ duration: 0.32, ease: [0.05, 0.7, 0.1, 1] }", "purpose": "Content that fades in: progress bars, step rows, the welcome paragraph." },
+      { "name": "js-tap", "value": "{ type: 'spring', stiffness: 600, damping: 30 }", "purpose": "Button press compression (scale 0.96)." },
+      { "name": "page-entrance", "value": "opacity 0->1, y 10->0 over 360ms on the out curve", "purpose": "The one authored entrance per page. Sections inside do not animate separately." },
+      { "name": "stagger", "value": "staggerChildren 0.045, delayChildren 0.04", "purpose": "The only nested motion allowed: list rows entering with the rise variant (opacity + 10px)." },
+      { "name": "ripple", "value": "scale(0) -> scale(2.6), opacity 0.16 -> 0 over 520ms on the out curve", "purpose": "Injected at the click point on every pill; removed after 560ms." },
+      { "name": "breathe", "value": "1.6s ease-in-out infinite, scale 1 -> 0.6, opacity 1 -> 0.5", "purpose": "The live-session dot. 1.2s on the active step dot in the add sheet." },
+      { "name": "shimmer", "value": "1.4s on the out curve, infinite", "purpose": "Skeleton sweep of --surface-high across --surface-mid." },
+      { "name": "sheet-spring", "value": "{ type: 'spring', stiffness: 380, damping: 36, mass: 0.9 }", "purpose": "Bottom sheet slide and desktop dialog scale." },
+      { "name": "drag-to-dismiss", "value": "offset.y > 100 || velocity.y > 700", "purpose": "The bottom sheet's dismissal threshold. Disabled on desktop and under reduced motion." }
+    ],
+    "breakpoints": [
+      { "name": "desktop", "value": "840px", "purpose": "The only breakpoint in the system. Flips navbar to rail, bottom sheet to centred dialog, chip scroller to wrapping set, and steps display/headline up one size." },
+      { "name": "coarse-pointer", "value": "(pointer: coarse)", "purpose": "Not a width query. Grows chips to 40px, .pill-sm to 44px, rows to 72px so every control clears 44px on touch." }
+    ],
+    "layout": [
+      { "name": "content-max", "value": "680px", "purpose": "The single centred column. There is no grid anywhere in the build." },
+      { "name": "gutter", "value": "20px", "purpose": "Horizontal page inset on phone; 40px (--s-8) on desktop." },
+      { "name": "nav-h", "value": "80px", "purpose": "Bottom navigation bar height; every fixed element composes with it plus --safe-bottom." },
+      { "name": "rail-w", "value": "88px", "purpose": "Desktop navigation rail width." },
+      { "name": "titlebar-h", "value": "0px / 36px", "purpose": "0 by default; promoted to 36px by data-frameless=\"true\" on <html> in the Tauri desktop window." },
+      { "name": "section-gap", "value": "32px (--s-7)", "purpose": "The gap between every section of a page." }
+    ]
+  },
+  "components": [
+    {
+      "name": "Filled Pill",
+      "kind": "button",
+      "refersTo": "pill-filled",
+      "description": "The single primary action per screen: Start, Analyze and save, Done. A sage capsule that compresses on press and ripples from the touch point.",
+      "html": "<button class=\"ds-pill ds-pill-filled\">Start</button>",
+      "css": ".ds-pill { position: relative; overflow: hidden; display: inline-flex; align-items: center; justify-content: center; gap: 8px; height: 48px; padding: 0 22px; border: 0; border-radius: 999px; font-family: var(--font, \"Figtree Variable\", system-ui, sans-serif); font-size: 15px; font-weight: 500; white-space: nowrap; cursor: pointer; transition: background 150ms cubic-bezier(0.05,0.7,0.1,1), color 150ms, transform 120ms cubic-bezier(0.2,0,0,1), opacity 150ms; } .ds-pill::after { content: \"\"; position: absolute; inset: 0; background: currentColor; opacity: 0; transition: opacity 150ms; } .ds-pill:active::after { opacity: 0.1; } .ds-pill:active { transform: scale(0.96); } .ds-pill:focus-visible { outline: 2px solid var(--primary, #2f6a52); outline-offset: 2px; } .ds-pill-filled { background: var(--primary, #2f6a52); color: var(--on-primary, #ffffff); }"
+    },
+    {
+      "name": "Tonal Pill",
+      "kind": "button",
+      "refersTo": "pill-tonal",
+      "description": "The default button. A surface-high capsule that steps one tone brighter on hover.",
+      "html": "<button class=\"ds-pill ds-pill-tonal\">Open</button>",
+      "css": ".ds-pill { position: relative; overflow: hidden; display: inline-flex; align-items: center; justify-content: center; gap: 8px; height: 48px; padding: 0 22px; border: 0; border-radius: 999px; font-family: var(--font, \"Figtree Variable\", system-ui, sans-serif); font-size: 15px; font-weight: 500; cursor: pointer; transition: background 150ms cubic-bezier(0.05,0.7,0.1,1), transform 120ms; } .ds-pill-tonal { background: var(--surface-high, #e2ded6); color: var(--on-surface, #1c1b1a); } .ds-pill-tonal:hover { background: var(--surface-bright, #ffffff); } .ds-pill-tonal:active { transform: scale(0.96); } .ds-pill-tonal:focus-visible { outline: 2px solid var(--primary, #2f6a52); outline-offset: 2px; }"
+    },
+    {
+      "name": "Text Pill",
+      "kind": "button",
+      "refersTo": "pill-text",
+      "description": "The secondary action beside a filled pill. Sage label, no fill until hover.",
+      "html": "<button class=\"ds-pill-text\">Details</button>",
+      "css": ".ds-pill-text { position: relative; display: inline-flex; align-items: center; gap: 8px; height: 48px; padding: 0 14px; border: 0; border-radius: 999px; background: transparent; color: var(--primary, #2f6a52); font-family: var(--font, \"Figtree Variable\", system-ui, sans-serif); font-size: 15px; font-weight: 500; cursor: pointer; transition: background 150ms cubic-bezier(0.05,0.7,0.1,1); } .ds-pill-text:hover { background: var(--surface-low, #f1eee8); } .ds-pill-text:active { background: var(--surface-mid, #eae6df); } .ds-pill-text:focus-visible { outline: 2px solid var(--primary, #2f6a52); outline-offset: 2px; }"
+    },
+    {
+      "name": "Filter Chip",
+      "kind": "chip",
+      "refersTo": "chip",
+      "description": "The only 10px radius in the system. Selected state swaps to the sage container and prepends a check.",
+      "html": "<span class=\"ds-chips\"><button class=\"ds-chip\" data-active=\"true\"><svg width=\"14\" height=\"14\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2.5\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M20 6 9 17l-5-5\"/></svg>LLMs</button><button class=\"ds-chip\">RAG</button><button class=\"ds-chip\">Agents</button></span>",
+      "css": ".ds-chips { display: flex; gap: 8px; flex-wrap: wrap; } .ds-chip { display: inline-flex; align-items: center; gap: 6px; height: 36px; padding: 0 14px; border: 0; border-radius: 10px; background: var(--surface-mid, #eae6df); color: var(--on-surface-2, #57544f); font-family: var(--font, \"Figtree Variable\", system-ui, sans-serif); font-size: 14px; font-weight: 500; white-space: nowrap; cursor: pointer; transition: background 150ms cubic-bezier(0.05,0.7,0.1,1), color 150ms, transform 120ms; } .ds-chip:not([data-active=\"true\"]):hover { background: var(--surface-high, #e2ded6); } .ds-chip:active { transform: scale(0.95); } .ds-chip[data-active=\"true\"] { background: var(--primary-container, #cfe7da); color: var(--on-primary-container, #0f3325); } .ds-chip:focus-visible { outline: 2px solid var(--primary, #2f6a52); outline-offset: 2px; }"
+    },
+    {
+      "name": "Slab",
+      "kind": "card",
+      "refersTo": "slab",
+      "description": "The one large surface in the system, and it is not a card: a one-step-lighter patch of the same material with 28px corners, no border and no shadow. Carries the Up-next title, its facts line, the coach sentence and the Start pill.",
+      "html": "<section class=\"ds-slab\"><h2 class=\"ds-slab-title\">Retrieval-Augmented Generation (RAG) Explained</h2><p class=\"ds-slab-meta\">LLMs &nbsp; ~12 min</p><p class=\"ds-slab-body\">This covers eval pipelines, your weakest area. Twelve minutes well spent before the interview round.</p><div class=\"ds-slab-actions\"><button class=\"ds-pill ds-pill-filled\">Start</button><button class=\"ds-pill-text\">Details</button></div></section>",
+      "css": ".ds-slab { background: var(--surface-low, #f1eee8); border-radius: 28px; padding: 24px; font-family: var(--font, \"Figtree Variable\", system-ui, sans-serif); } .ds-slab-title { margin: 0; font-size: 28px; line-height: 1.15; letter-spacing: -0.02em; font-weight: 400; color: var(--on-surface, #1c1b1a); } .ds-slab-meta { margin: 10px 0 0; font-size: 13px; line-height: 1.4; color: var(--on-surface-3, #67635d); } .ds-slab-body { margin: 14px 0 0; font-size: 17px; line-height: 1.45; color: var(--on-surface-2, #57544f); } .ds-slab-actions { display: flex; gap: 8px; margin-top: 22px; } .ds-pill { position: relative; display: inline-flex; align-items: center; justify-content: center; gap: 8px; height: 56px; padding: 0 28px; border: 0; border-radius: 999px; font: inherit; font-size: 16px; font-weight: 500; cursor: pointer; transition: background 150ms cubic-bezier(0.05,0.7,0.1,1), transform 120ms; } .ds-pill-filled { background: var(--primary, #2f6a52); color: var(--on-primary, #ffffff); } .ds-pill-filled:active { transform: scale(0.96); } .ds-pill-text { height: 56px; padding: 0 14px; border: 0; border-radius: 999px; background: transparent; color: var(--primary, #2f6a52); font: inherit; font-size: 16px; font-weight: 500; cursor: pointer; transition: background 150ms; } .ds-pill-text:hover { background: var(--surface-mid, #eae6df); }"
+    },
+    {
+      "name": "Text Field",
+      "kind": "input",
+      "refersTo": "input",
+      "description": "A 52px filled capsule with no border. On focus the fill steps one tone up and a 2px sage inset ring appears, so the capsule shape survives.",
+      "html": "<label class=\"ds-field\"><span class=\"ds-label\">Link</span><input class=\"ds-input\" placeholder=\"YouTube, Instagram or article link\" /></label>",
+      "css": ".ds-field { display: flex; flex-direction: column; gap: 8px; font-family: var(--font, \"Figtree Variable\", system-ui, sans-serif); } .ds-label { font-size: 13px; font-weight: 500; color: var(--on-surface-2, #57544f); padding-left: 4px; } .ds-input { height: 52px; width: 100%; padding: 0 20px; border: 0; border-radius: 999px; background: var(--surface-mid, #eae6df); color: var(--on-surface, #1c1b1a); font: inherit; font-size: 15px; transition: background 150ms, box-shadow 150ms; } .ds-input::placeholder { color: var(--on-surface-3, #67635d); } .ds-input:focus { outline: none; background: var(--surface-high, #e2ded6); box-shadow: 0 0 0 2px var(--primary, #2f6a52) inset; }"
+    },
+    {
+      "name": "Bottom Navigation",
+      "kind": "nav",
+      "refersTo": "navbar",
+      "description": "Four destinations on a surface-low bar with no top border. The active destination carries a 64x32px sage-container indicator pill that slides between destinations via a shared layoutId.",
+      "html": "<nav class=\"ds-navbar\"><a class=\"ds-dest\" data-active=\"true\"><span class=\"ds-dest-ind\"><span class=\"ds-dest-pill\"></span><svg width=\"22\" height=\"22\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2.4\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M3 9.5 12 3l9 6.5V20a1 1 0 0 1-1 1h-5v-7H9v7H4a1 1 0 0 1-1-1z\"/></svg></span><span>Today</span></a><a class=\"ds-dest\"><span class=\"ds-dest-ind\"><svg width=\"22\" height=\"22\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.9\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M4 19.5V5a2 2 0 0 1 2-2h13v18H6a2 2 0 0 1-2-1.5z\"/><path d=\"M8 3v18\"/></svg></span><span>Library</span></a><a class=\"ds-dest\"><span class=\"ds-dest-ind\"><svg width=\"22\" height=\"22\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.9\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M3 3v18h18\"/><path d=\"M7 16V9\"/><path d=\"M12 16V5\"/><path d=\"M17 16v-4\"/></svg></span><span>Progress</span></a><a class=\"ds-dest\"><span class=\"ds-dest-ind\"><svg width=\"22\" height=\"22\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.9\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><circle cx=\"12\" cy=\"12\" r=\"3\"/><path d=\"M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.6 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.6a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z\"/></svg></span><span>Settings</span></a></nav>",
+      "css": ".ds-navbar { display: grid; grid-template-columns: repeat(4, 1fr); height: 80px; padding: 12px 8px 0; background: var(--surface-low, #f1eee8); font-family: var(--font, \"Figtree Variable\", system-ui, sans-serif); border-radius: 0; } .ds-dest { display: flex; flex-direction: column; align-items: center; justify-content: flex-start; gap: 4px; color: var(--on-surface-2, #57544f); font-size: 12px; font-weight: 500; cursor: pointer; text-decoration: none; } .ds-dest-ind { position: relative; width: 64px; height: 32px; border-radius: 16px; display: grid; place-items: center; } .ds-dest-ind svg { position: relative; } .ds-dest-pill { position: absolute; inset: 0; border-radius: 16px; background: var(--primary-container, #cfe7da); } .ds-dest[data-active=\"true\"] { color: var(--on-surface, #1c1b1a); } .ds-dest[data-active=\"true\"] .ds-dest-ind { color: var(--on-primary-container, #0f3325); } .ds-dest:hover .ds-dest-ind { color: var(--on-surface, #1c1b1a); }"
+    },
+    {
+      "name": "List Row",
+      "kind": "custom",
+      "refersTo": "rowitem",
+      "description": "The quiet list you scroll past. Borderless, 64px min height, with an 18px-radius hit area that bleeds 12px past the column so the hover fill reads as a target rather than a box.",
+      "html": "<div class=\"ds-rows\"><button class=\"ds-rowitem\"><span class=\"ds-thumb\"><svg width=\"20\" height=\"20\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.8\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><rect x=\"2\" y=\"3\" width=\"20\" height=\"18\" rx=\"2\"/><path d=\"M7 3v18M17 3v18M2 9h5M2 15h5M17 9h5M17 15h5\"/></svg></span><span class=\"ds-rowitem-main\"><span class=\"ds-rowitem-title\">Intro to Large Language Models</span><span class=\"ds-rowitem-meta\">LLMs &nbsp; 58 min &nbsp; <span class=\"ds-dots\"><i data-on=\"true\"></i><i data-on=\"true\"></i><i data-on=\"true\"></i><i data-on=\"true\"></i><i></i></span></span></span></button></div>",
+      "css": ".ds-rows { display: flex; flex-direction: column; font-family: var(--font, \"Figtree Variable\", system-ui, sans-serif); } .ds-rowitem { position: relative; overflow: hidden; display: flex; gap: 14px; align-items: center; text-align: left; width: 100%; padding: 10px 12px; border: 0; background: transparent; border-radius: 18px; min-height: 64px; cursor: pointer; transition: background 150ms cubic-bezier(0.05,0.7,0.1,1), transform 120ms; } .ds-rowitem:hover { background: var(--surface-low, #f1eee8); } .ds-rowitem:active { background: var(--surface-mid, #eae6df); transform: scale(0.985); } .ds-rowitem:focus-visible { outline: 2px solid var(--primary, #2f6a52); outline-offset: 2px; } .ds-thumb { width: 88px; aspect-ratio: 16 / 9; border-radius: 14px; overflow: hidden; flex-shrink: 0; background: var(--surface-mid, #eae6df); display: flex; align-items: center; justify-content: center; color: var(--on-surface-3, #67635d); } .ds-rowitem-main { display: flex; flex-direction: column; gap: 3px; min-width: 0; } .ds-rowitem-title { font-size: 15.5px; line-height: 1.3; font-weight: 500; color: var(--on-surface, #1c1b1a); } .ds-rowitem-meta { display: flex; align-items: center; font-size: 13px; line-height: 1.4; color: var(--on-surface-3, #67635d); } .ds-dots { display: inline-flex; gap: 3px; align-items: center; } .ds-dots i { width: 5px; height: 5px; border-radius: 999px; background: var(--on-surface-3, #67635d); opacity: 0.35; } .ds-dots i[data-on=\"true\"] { background: var(--primary, #2f6a52); opacity: 1; }"
+    },
+    {
+      "name": "Live Session Pill",
+      "kind": "custom",
+      "refersTo": "live-pill",
+      "description": "The signature component and the reason for the Recorder grammar. A floating surface-bright capsule with a breathing red dot, the item title, a tabular-figure elapsed timer, a stop button and a filled Done pill.",
+      "html": "<div class=\"ds-live\"><span class=\"ds-live-dot\"></span><button class=\"ds-live-main\"><span class=\"ds-live-title\">Intro to Large Language Models</span><span class=\"ds-live-time\">12:04</span></button><button class=\"ds-live-stop\" aria-label=\"Stop\"><svg width=\"15\" height=\"15\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\"><rect x=\"3\" y=\"3\" width=\"18\" height=\"18\" rx=\"2\"/></svg></button><button class=\"ds-live-done\"><svg width=\"16\" height=\"16\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2.5\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M20 6 9 17l-5-5\"/></svg>Done</button></div>",
+      "css": ".ds-live { display: flex; align-items: center; gap: 12px; background: var(--surface-bright, #ffffff); color: var(--on-surface, #1c1b1a); border-radius: 999px; padding: 8px 8px 8px 18px; box-shadow: 0 8px 28px rgba(28,27,26,0.14), 0 2px 6px rgba(28,27,26,0.08); font-family: var(--font, \"Figtree Variable\", system-ui, sans-serif); max-width: 520px; } .ds-live-dot { width: 10px; height: 10px; border-radius: 999px; background: var(--error, #b3261e); flex-shrink: 0; animation: ds-breathe 1.6s ease-in-out infinite; } @keyframes ds-breathe { 0%, 100% { transform: scale(1); opacity: 1; } 50% { transform: scale(0.6); opacity: 0.5; } } .ds-live-main { flex: 1; min-width: 0; display: flex; flex-direction: column; align-items: flex-start; border: 0; background: none; padding: 0; text-align: left; cursor: pointer; color: inherit; font: inherit; } .ds-live-title { font-size: 14px; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 100%; } .ds-live-time { font-size: 13px; line-height: 1.4; color: var(--on-surface-3, #67635d); font-variant-numeric: tabular-nums; } .ds-live-stop { display: grid; place-items: center; width: 40px; height: 40px; border: 0; border-radius: 999px; background: transparent; color: var(--on-surface-2, #57544f); cursor: pointer; transition: background 150ms; } .ds-live-stop:hover { background: var(--surface-low, #f1eee8); } .ds-live-done { display: inline-flex; align-items: center; gap: 8px; height: 38px; padding: 0 16px; border: 0; border-radius: 999px; background: var(--primary, #2f6a52); color: var(--on-primary, #ffffff); font: inherit; font-size: 14px; font-weight: 500; cursor: pointer; transition: transform 120ms; } .ds-live-done:active { transform: scale(0.96); }"
+    },
+    {
+      "name": "Snackbar",
+      "kind": "custom",
+      "refersTo": "snackbar",
+      "description": "The one inverted surface in the system. Single line, no wrap, springs in from 16px below and auto-dismisses after 2800ms.",
+      "html": "<div class=\"ds-snackbar\">Session started</div>",
+      "css": ".ds-snackbar { display: inline-block; background: var(--inverse-surface, #2f2e2c); color: var(--inverse-on-surface, #f3f0eb); padding: 12px 18px; border-radius: 14px; font-family: var(--font, \"Figtree Variable\", system-ui, sans-serif); font-size: 14px; font-weight: 500; white-space: nowrap; box-shadow: 0 8px 28px rgba(28,27,26,0.14), 0 2px 6px rgba(28,27,26,0.08); }"
+    },
+    {
+      "name": "Switch",
+      "kind": "custom",
+      "refersTo": "switch",
+      "description": "A 52x32px track with a 2px inset ring when off and a solid sage fill when on. The thumb scales 0.66 to 1 and translates 20px on the spring curve.",
+      "html": "<button class=\"ds-switch\" role=\"switch\" aria-checked=\"true\" data-on=\"true\" aria-label=\"Notifications\"></button>",
+      "css": ".ds-switch { position: relative; width: 52px; height: 32px; border: 0; padding: 0; border-radius: 999px; background: var(--surface-high, #e2ded6); box-shadow: inset 0 0 0 2px var(--on-surface-3, #67635d); cursor: pointer; flex-shrink: 0; transition: background 240ms cubic-bezier(0.05,0.7,0.1,1), box-shadow 240ms; } .ds-switch::before { content: \"\"; position: absolute; inset: -8px; } .ds-switch::after { content: \"\"; position: absolute; top: 4px; left: 4px; width: 24px; height: 24px; border-radius: 999px; background: var(--on-surface-3, #67635d); transform: scale(0.66); transition: transform 240ms cubic-bezier(0.2,0,0,1), background 240ms; } .ds-switch[data-on=\"true\"] { background: var(--primary, #2f6a52); box-shadow: none; } .ds-switch[data-on=\"true\"]::after { transform: translateX(20px) scale(1); background: var(--on-primary, #ffffff); } .ds-switch:focus-visible { outline: 2px solid var(--primary, #2f6a52); outline-offset: 2px; }"
+    },
+    {
+      "name": "Progress Bar",
+      "kind": "custom",
+      "refersTo": "bar",
+      "description": "The only meter in the system: a 4px fully-rounded track on surface-high with a sage fill that animates from zero over 700ms. Today's minutes against the daily target.",
+      "html": "<div class=\"ds-bar\"><i style=\"width: 62%\"></i></div>",
+      "css": ".ds-bar { height: 4px; border-radius: 999px; background: var(--surface-high, #e2ded6); overflow: hidden; } .ds-bar > i { display: block; height: 100%; border-radius: 999px; background: var(--primary, #2f6a52); transform-origin: left; transition: width 700ms cubic-bezier(0.05,0.7,0.1,1); }"
+    }
+  ],
+  "narrative": {
+    "northStar": "The Pixel Recorder",
+    "overview": "UpWise is the Now Playing screen of a learning habit. The whole interface is one calm tonal sheet with a single sentence set large on it — what to learn now — and one pill to press. Everything below that is a quiet list you scroll past. The system is Material You read through Google's Recorder app: tonal surfaces stepped by lightness rather than divided by lines, generous corner radii, one accent used sparingly, and motion that feels sprung rather than eased.\n\nDensity is deliberately low. A screen is a single 680px column of stacked sections separated by 32px of air, never a grid of cards. Type does the hierarchy work: a 40px display line, a 28px headline for the one thing that matters, and everything else at 15px or 13px in a dimmer on-surface tone. Weight is almost entirely regular (400); 500 appears only on labels, pills and row titles. Nothing is bolded for emphasis and nothing is uppercased.\n\nThe confirmed anti-reference is the card-grid dashboard: boxed tiles, KPI stat cards, dividing rules, and hairline borders around content. The build refuses all of them — there is exactly one shadow token in the system and it is reserved for things that float above the page. Two platforms share this system unchanged: a Tauri webview in a frameless desktop window and an Android WebView on a Pixel. A single 840px breakpoint is the only thing that differs between them.",
+    "keyCharacteristics": [
+      "Tonal surfaces stepped by lightness; no borders, no dividers, one shadow token",
+      "One sage accent (--primary) and one apricot warmth (--warm); nothing else is coloured",
+      "Figtree at regular weight, set large — 40px display, 28px headline",
+      "28px slabs, 999px pills, 14px thumbnails, 18px row hit areas",
+      "One authored entrance per page; spring physics, never linear easing",
+      "A single 840px breakpoint flips navbar to rail and bottom sheet to centred dialog"
+    ],
+    "rules": [
+      { "name": "The Step, Don't Draw Rule", "body": "Separation is a change of tone, never a line. A surface that needs to read as distinct moves one step up the ramp (--surface -> --surface-low -> --surface-mid -> --surface-high -> --surface-bright). No border, no border-top, no <hr> appears anywhere in the built stylesheets. If two things need separating and a tone step is wrong, use space instead.", "section": "colors" },
+      { "name": "The One Accent Rule", "body": "Sage is the only colour that means \"act\". Apricot means \"warm fact\" (streak, growing backlog) and red means \"live or wrong\". A screen carries one sage moment — the Start pill or the active nav indicator — and nothing competes with it.", "section": "colors" },
+      { "name": "The Warm-On-Quiet-Surfaces Rule", "body": "--warm as text is legible on --surface (4.98:1) and --surface-low (4.65:1) only. It drops to 4.32:1 on --surface-mid and 4.01:1 on --surface-high. Warm text lives on the page or in a slab; on higher surfaces use --warm-container with --on-warm-container (9.77:1) instead.", "section": "colors" },
+      { "name": "The Regular Weight Rule", "body": "h1-h4 and p are reset to font-weight: 400 globally. Emphasis comes from size, tone and space. Weight 500 is reserved for interactive labels (pills, chips, nav destinations, row titles) and small labels; 600+ appears nowhere.", "section": "typography" },
+      { "name": "The One Display Rule", "body": "Exactly one .display per screen and it is the first thing in the column. If a second idea wants display size, it is a different screen or it is a .headline.", "section": "typography" },
+      { "name": "The Sentence, Not The Tile Rule", "body": "Numbers are set as prose inside a .headline, not as KPI tiles — \"12-day streak, best 20. 48 things learned.\" Statistics get a sentence and a colour span; they never get a box.", "section": "typography" },
+      { "name": "The single-breakpoint rule", "body": "840px is the only breakpoint in the system. It flips exactly four things: navbar to rail, bottom sheet to centred dialog, horizontal chip scroller to wrapping chip set, and the display/headline sizes up one step. A second breakpoint is a design failure, not a fix.", "section": "layout" },
+      { "name": "The Float-Only Shadow Rule", "body": "A shadow means \"this is not part of the page\". Slabs, rows, inputs, chips, sheets, the navbar and the rail all carry zero shadow at every state. If an element scrolls with the content, it does not get --shadow-float.", "section": "elevation" },
+      { "name": "The Scrim Rule", "body": "Modality is the only other depth device: .scrim at rgba(0,0,0,0.42) full-bleed behind a sheet. No blur, no backdrop-filter anywhere in the build.", "section": "elevation" },
+      { "name": "The Never-Boxed Rule", "body": "No element in the system has a border. The only stroke-like treatments are box-shadow: inset on a focused input and on the off-state switch track — both are state feedback, not structure. A \"card\" in this system is a .slab: a tone step with 28px corners and 24px padding, used once or twice per screen, never as a repeating grid unit.", "section": "shapes" },
+      { "name": "The Squircle Family Rule", "body": "Square-ish controls take a radius roughly a third of their size — 60px FAB at 20px, 56px rail FAB at 18px, 32px brand mark at 10px — so nothing ever reads as a circle unless it is a true pill.", "section": "shapes" },
+      { "name": "The One Entrance Rule", "body": "<Page> animates once — opacity 0->1 and y 10->0 over 360ms on the --out curve — and sections inside it do not animate separately. <Rise> is a plain wrapper that exists to mark those sections; it deliberately renders no animation of its own. The only nested motion allowed is a list stagger: stagger fires children 45ms apart with the rise variant, used on .rows.", "section": "components" }
+    ],
+    "dos": [
+      "Do separate surfaces by stepping the tonal ramp (--surface -> --surface-low -> --surface-mid -> --surface-high -> --surface-bright), and reach for space before reaching for a second step.",
+      "Do give every screen exactly one .display line and at most one filled sage pill.",
+      "Do compose every fixed element with --safe-top / --safe-bottom and with --nav-h; the phone target has a punch-hole camera and gesture navigation.",
+      "Do wrap a screen in <Page> and let that be its only entrance animation; use stagger + rise only on a list of rows.",
+      "Do use .num on anything that ticks or counts — timers, streaks, minute totals — so digits do not jitter.",
+      "Do set secondary copy in --on-surface-2 (>=5.62:1 on every light surface, >=5.77:1 on every dark one) and reserve --on-surface-3 for 13px meta lines.",
+      "Do add new size variants to the coarse-pointer block if they are drawn under 44px; .pill-sm and .chip both already do this.",
+      "Do keep the sage accent under roughly a tenth of any screen. Its rarity is what makes the Start pill obvious."
+    ],
+    "donts": [
+      "Don't add a border, a border-top, a divider rule or an <hr>. The system has none and the tonal step is the replacement.",
+      "Don't build a card grid, a KPI tile row, or any repeating boxed unit. Numbers are set as a sentence in a .headline; lists are borderless .rowitem rows.",
+      "Don't apply --shadow-float to anything that scrolls with the page. Shadow means fixed and floating — FAB, live pill, snackbar, rail FAB on hover.",
+      "Don't introduce a second breakpoint, a second font family, or a font weight above 500.",
+      "Don't uppercase or letterspace a label for emphasis; .section-title is sentence case at +0.01em and that is the ceiling.",
+      "Don't put --warm text on --surface-mid or --surface-high (4.32:1 / 4.01:1). Use --warm-container with --on-warm-container there.",
+      "Don't animate a section inside a <Page>. If something needs its own entrance, it is probably a new page.",
+      "Don't hardcode a hex in a component. Every colour in the build comes from a token so that both themes and the data-theme override keep working.",
+      "Don't stage a scripted multi-beat animation outside the onboarding welcome. One entrance, then the interface holds still."
+    ]
+  }
+}

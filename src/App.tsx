@@ -1,51 +1,103 @@
-import { useState } from "react";
-import reactLogo from "./assets/react.svg";
-import { invoke } from "@tauri-apps/api/core";
-import "./App.css";
+import { useEffect, useRef } from "react";
+import { HashRouter, Route, Routes, useNavigate } from "react-router";
+import { AlertTriangle } from "lucide-react";
+import { useAuth } from "./hooks/useAuth";
+import { useItems, useProfile, useSessions, markNotificationOpened } from "./lib/api";
+import { replanNotifications } from "./lib/notifications";
+import { installShareBridge } from "./lib/share";
+import { isTauri } from "./lib/platform";
+import { AppShell } from "./components/AppShell";
+import { WindowControls } from "./components/WindowControls";
+import { Spinner } from "./components/ui";
+import { Onboarding } from "./screens/Onboarding";
+import { HomeScreen, useCoach } from "./screens/Home";
+import { LibraryScreen } from "./screens/Library";
+import { ItemDetailScreen } from "./screens/ItemDetail";
+import { StatsScreen } from "./screens/Stats";
+import { SettingsScreen } from "./screens/Settings";
 
-function App() {
-  const [greetMsg, setGreetMsg] = useState("");
-  const [name, setName] = useState("");
+installShareBridge();
 
-  async function greet() {
-    // Learn more about Tauri commands at https://tauri.app/develop/calling-rust/
-    setGreetMsg(await invoke("greet", { name }));
-  }
-
+export default function App() {
   return (
-    <main className="container">
-      <h1>Welcome to Tauri + React</h1>
-
-      <div className="row">
-        <a href="https://vite.dev" target="_blank">
-          <img src="/vite.svg" className="logo vite" alt="Vite logo" />
-        </a>
-        <a href="https://tauri.app" target="_blank">
-          <img src="/tauri.svg" className="logo tauri" alt="Tauri logo" />
-        </a>
-        <a href="https://react.dev" target="_blank">
-          <img src={reactLogo} className="logo react" alt="React logo" />
-        </a>
-      </div>
-      <p>Click on the Tauri, Vite, and React logos to learn more.</p>
-
-      <form
-        className="row"
-        onSubmit={(e) => {
-          e.preventDefault();
-          greet();
-        }}
-      >
-        <input
-          id="greet-input"
-          onChange={(e) => setName(e.currentTarget.value)}
-          placeholder="Enter a name..."
-        />
-        <button type="submit">Greet</button>
-      </form>
-      <p>{greetMsg}</p>
-    </main>
+    <HashRouter>
+      <Gate />
+    </HashRouter>
   );
 }
 
-export default App;
+function Gate() {
+  const { session, loading, error } = useAuth();
+  const profile = useProfile();
+
+  if (loading || (session && profile.isLoading)) {
+    return <Center><Spinner size={26} /></Center>;
+  }
+  if (error || !session) {
+    return (
+      <Center>
+        <AlertTriangle size={28} style={{ color: "var(--warm)" }} />
+        <h3 className="headline-sm">Couldn't connect</h3>
+        <p className="meta selectable" style={{ maxWidth: 360, textAlign: "center" }}>{error ?? "No session"}</p>
+      </Center>
+    );
+  }
+  if (profile.error) {
+    return <Center><p className="meta">{profile.error.message}</p></Center>;
+  }
+  if (!profile.data?.onboarded) return <><WindowControls /><Onboarding /></>;
+
+  return (
+    <>
+      <WindowControls />
+      <Background />
+      <Routes>
+        <Route element={<AppShell />}>
+          <Route path="/" element={<HomeScreen />} />
+          <Route path="/library" element={<LibraryScreen />} />
+          <Route path="/item/:id" element={<ItemDetailScreen />} />
+          <Route path="/stats" element={<StatsScreen />} />
+          <Route path="/settings" element={<SettingsScreen />} />
+        </Route>
+      </Routes>
+    </>
+  );
+}
+
+/** Non-visual: keeps nudges planned and handles notification taps. */
+function Background() {
+  const profile = useProfile();
+  const items = useItems();
+  const sessions = useSessions(30);
+  const { coach } = useCoach(false);
+  const nav = useNavigate();
+  const planned = useRef<string>("");
+
+  useEffect(() => {
+    if (!isTauri || !profile.data || !items.data || !sessions.data) return;
+    // Replan at most once per (day, item count, settings) so we don't spam the scheduler.
+    const key = `${new Date().toDateString()}|${items.data.length}|${JSON.stringify(profile.data.settings)}|${coach?.fetched_at ?? 0}`;
+    if (planned.current === key) return;
+    planned.current = key;
+    void replanNotifications({ profile: profile.data, items: items.data, sessions: sessions.data, coach });
+  }, [profile.data, items.data, sessions.data, coach]);
+
+  useEffect(() => {
+    if (!isTauri) return;
+    let off: (() => void) | undefined;
+    import("@tauri-apps/plugin-notification").then(({ onAction }) => {
+      onAction((n) => {
+        void markNotificationOpened(n.title);
+        const itemId = (n.extra as { itemId?: string } | undefined)?.itemId;
+        nav(itemId ? `/item/${itemId}` : "/");
+      }).then((l) => { off = () => l.unregister(); });
+    }).catch(() => {});
+    return () => off?.();
+  }, [nav]);
+
+  return null;
+}
+
+function Center({ children }: { children: React.ReactNode }) {
+  return <div style={{ minHeight: "100dvh", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 12, padding: 24 }}>{children}</div>;
+}
