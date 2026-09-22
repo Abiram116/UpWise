@@ -29,6 +29,7 @@ export function ItemDetailScreen() {
   const stop = useSessionStore((s) => s.stop);
   const [showTranscript, setShowTranscript] = useState(false);
   const [logOpen, setLogOpen] = useState(false);
+  const [finishPromptOpen, setFinishPromptOpen] = useState(false);
   const [confirmDel, setConfirmDel] = useState(false);
 
   if (isLoading) return <Page><Skeleton h={220} r={28} /><Skeleton h={30} w="70%" /><Skeleton h={80} /></Page>;
@@ -40,10 +41,13 @@ export function ItemDetailScreen() {
   const done = item.status === "completed";
   const trust = confidence(item);
 
+  // Only the timed-session path ("Done learning" while a session is running) logs real elapsed
+  // time automatically. A manual "mark done" with zero time behind it is exactly how the stats
+  // end up saying "2 things learned, 1 min invested" — so it goes through FinishPromptSheet
+  // instead, which asks for an honest minute estimate before marking complete.
   const finish = async () => {
-    if (isActive) await stop(true); else await setStatus(item.id, "completed");
-    qc.invalidateQueries({ queryKey: ["activity"] });
-    toast("Marked as learned");
+    if (isActive) { await stop(true); qc.invalidateQueries({ queryKey: ["activity"] }); toast("Marked as learned"); }
+    else setFinishPromptOpen(true);
   };
 
   return (
@@ -186,6 +190,16 @@ export function ItemDetailScreen() {
       </Sheet>
 
       <LogTimeSheet open={logOpen} onClose={() => setLogOpen(false)} itemId={item.id} onLogged={() => { qc.invalidateQueries({ queryKey: ["activity"] }); qc.invalidateQueries({ queryKey: ["sessions"] }); toast("Time logged"); }} />
+
+      <FinishPromptSheet open={finishPromptOpen} onClose={() => setFinishPromptOpen(false)} itemId={item.id} hasTakeaway={!!ai.takeaway}
+        onDone={async (minutes) => {
+          if (minutes > 0) await logManualMinutes(item.id, minutes);
+          await setStatus(item.id, "completed");
+          qc.invalidateQueries({ queryKey: ["activity"] });
+          qc.invalidateQueries({ queryKey: ["sessions"] });
+          setFinishPromptOpen(false);
+          toast("Marked as learned");
+        }} />
     </Page>
   );
 }
@@ -206,6 +220,24 @@ function LogTimeSheet({ open, onClose, itemId, onLogged }: { open: boolean; onCl
     <Sheet open={open} onClose={onClose} title="Log learning time">
       <p className="body" style={{ marginBottom: 16 }}>Watched it outside the app? Add the time so your stats stay honest.</p>
       <div className="chips">{[5, 10, 15, 20, 30, 45, 60].map((m) => <Chip key={m} onClick={() => !busy && log(m)}>{m} min</Chip>)}</div>
+    </Sheet>
+  );
+}
+
+// A "Mark done" with no session behind it is exactly how stats end up claiming "2 things
+// learned, 1 min invested" — so completing always asks for an honest minute estimate first.
+// No 0-min option on purpose: if truly no time was spent, "Skip" is the honest status, not "done".
+function FinishPromptSheet({ open, onClose, hasTakeaway, onDone }: {
+  open: boolean; onClose: () => void; itemId: string; hasTakeaway: boolean; onDone: (minutes: number) => Promise<void>;
+}) {
+  const [busy, setBusy] = useState<number | null>(null);
+  const pick = async (m: number) => { setBusy(m); try { await onDone(m); } finally { setBusy(null); } };
+  return (
+    <Sheet open={open} onClose={onClose} title="How long did that take?">
+      <p className="body" style={{ marginBottom: 16 }}>
+        {hasTakeaway ? "Even just reading the takeaway counts — pick roughly how long." : "Pick roughly how long you actually spent, so your stats stay honest."}
+      </p>
+      <div className="chips">{[1, 3, 5, 10, 15, 20, 30, 45, 60].map((m) => <Chip key={m} onClick={() => busy === null && pick(m)}>{m} min</Chip>)}</div>
     </Sheet>
   );
 }

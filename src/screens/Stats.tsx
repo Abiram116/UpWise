@@ -56,7 +56,7 @@ export function StatsScreen() {
       <Rise>
         <p className="headline" style={{ lineHeight: 1.3 }}>
           <span style={{ color: "var(--warm)" }}><Count to={data.streak.current} /></span>-day streak, best {data.streak.best}.<br />
-          <Count to={data.totalDone} /> things learned, <Count to={data.concepts} /> concepts.<br />
+          <Count to={data.totalDone} /> {data.totalDone === 1 ? "thing" : "things"} learned, <Count to={data.concepts} /> {data.concepts === 1 ? "concept" : "concepts"}.<br />
           <span style={{ color: "var(--primary)" }}>{fmtMinutes(data.totalMinutes)}</span> invested.
         </p>
         <p className="body" style={{ marginTop: 10 }}>
