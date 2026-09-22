@@ -35,17 +35,36 @@ export function AddSheet({ open, onClose }: { open: boolean; onClose: () => void
   const [error, setError] = useState<string | null>(null);
   const analyze = useAnalyze();
   const inputRef = useRef<HTMLInputElement>(null);
+  const toast = useToast();
   const q = useSyncExternalStore(queueStore.subscribe, queueStore.get);
 
+  // Each add attempt gets an id. If the user dismisses the sheet while one is still
+  // running, its id lands here — the request keeps going in the background (it's a
+  // plain fetch, not tied to the sheet's visibility) and reports via toast instead of
+  // trying to update a form the user already closed or has since reused for something else.
+  const activeRunId = useRef(0);
+  const dismissedRuns = useRef(new Set<number>());
+
   const run = async (u: string, via: "paste" | "share" = "paste") => {
+    const runId = ++activeRunId.current;
     setError(null); setResult(null); setStage("metadata");
     try {
-      const r = await analyze.mutateAsync([u, { note: note.trim() || undefined, addedVia: via, onStage: setStage }]);
-      setResult(r);
+      const r = await analyze.mutateAsync([u, {
+        note: note.trim() || undefined, addedVia: via,
+        onStage: (s) => { if (!dismissedRuns.current.has(runId)) setStage(s); },
+      }]);
+      if (dismissedRuns.current.has(runId)) {
+        toast(r.duplicate ? "Already in your library" : `Saved: ${r.item.title ?? "your link"}`);
+      } else {
+        setResult(r);
+      }
     } catch (e) {
-      setError((e as Error).message || "Something went wrong");
+      const message = (e as Error).message || "Something went wrong";
+      if (dismissedRuns.current.has(runId)) toast(`Couldn't save that link: ${message}`);
+      else setError(message);
     } finally {
-      setStage(null);
+      dismissedRuns.current.delete(runId);
+      if (activeRunId.current === runId) setStage(null);
     }
   };
 
@@ -60,14 +79,18 @@ export function AddSheet({ open, onClose }: { open: boolean; onClose: () => void
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, q?.nonce]);
 
-  const reset = () => { setUrl(""); setNote(""); setResult(null); setError(null); setStage(null); };
-  const close = () => { onClose(); setTimeout(reset, 300); };
-
   const busy = stage !== null;
   const source = url ? detectSource(url) : null;
 
+  const reset = () => { setUrl(""); setNote(""); setResult(null); setError(null); setStage(null); };
+  const close = () => {
+    if (busy) dismissedRuns.current.add(activeRunId.current);
+    onClose();
+    setTimeout(reset, 300);
+  };
+
   return (
-    <Sheet open={open} onClose={busy ? () => {} : close} title={result ? undefined : busy ? "Reading it" : "Add a link"}>
+    <Sheet open={open} onClose={close} title={result ? undefined : busy ? "Reading it" : "Add a link"}>
       <AnimatePresence mode="wait" initial={false}>
         {!busy && !result && (
           <motion.form key="form" className="col" style={{ gap: 12 }} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.15 }}

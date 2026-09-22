@@ -92,7 +92,7 @@ export function HomeScreen() {
           </motion.section>
         </Rise>
       ) : (
-        <Rise><Empty title="Nothing waiting" body="Share a video from YouTube or paste a link. UpWise reads it and tells you whether it's worth your time." /></Rise>
+        <Rise><Empty title="Nothing waiting" body="Paste a link, or share one from YouTube or Instagram. UpWise reads it and tells you whether it's worth your time." /></Rise>
       )}
 
       <Rise>
