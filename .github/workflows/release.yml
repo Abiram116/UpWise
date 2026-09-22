@@ -65,6 +65,10 @@ jobs:
       # long-removed legacy "tools" package, so we just use sdkmanager that's already on PATH.
       - name: Install SDK packages + NDK
         run: |
+          CMDLINE_TOOLS="$(ls -d "$ANDROID_HOME"/cmdline-tools/*/ | sort -V | tail -1)bin"
+          echo "$CMDLINE_TOOLS" >> "$GITHUB_PATH"
+          echo "$ANDROID_HOME/platform-tools" >> "$GITHUB_PATH"
+          export PATH="$CMDLINE_TOOLS:$ANDROID_HOME/platform-tools:$PATH"
           yes | sdkmanager --licenses > /dev/null
           sdkmanager "platform-tools" "platforms;android-34" "build-tools;34.0.0" "ndk;27.0.12077973"
       - uses: dtolnay/rust-toolchain@stable
