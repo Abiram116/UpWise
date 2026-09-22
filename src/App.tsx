@@ -6,6 +6,7 @@ import { useItems, useProfile, useSessions, markNotificationOpened } from "./lib
 import { replanNotifications } from "./lib/notifications";
 import { installShareBridge } from "./lib/share";
 import { isTauri } from "./lib/platform";
+import { getPref, setPref } from "./lib/store";
 import { AppShell } from "./components/AppShell";
 import { WindowControls } from "./components/WindowControls";
 import { Spinner } from "./components/ui";
@@ -71,16 +72,26 @@ function Background() {
   const sessions = useSessions(30);
   const { coach } = useCoach(false);
   const nav = useNavigate();
-  const planned = useRef<string>("");
+  // Persisted (survives cold starts, unlike a ref) so reopening the app the same day never
+  // re-plans. Settings changes replan directly via their own save handler, independent of this.
+  const plannedRef = useRef<string>("");
 
   useEffect(() => {
     if (!isTauri || !profile.data || !items.data || !sessions.data) return;
-    // Replan at most once per (day, item count, settings) so we don't spam the scheduler.
-    const key = `${new Date().toDateString()}|${items.data.length}|${JSON.stringify(profile.data.settings)}|${coach?.fetched_at ?? 0}`;
-    if (planned.current === key) return;
-    planned.current = key;
-    void replanNotifications({ profile: profile.data, items: items.data, sessions: sessions.data, coach });
-  }, [profile.data, items.data, sessions.data, coach]);
+    const today = new Date().toDateString();
+    let cancelled = false;
+    (async () => {
+      const lastPlanned = await getPref<string>("notifPlannedDate", "");
+      if (cancelled || lastPlanned === today || plannedRef.current === today) return;
+      plannedRef.current = today;
+      await setPref("notifPlannedDate", today);
+      void replanNotifications({ profile: profile.data!, items: items.data!, sessions: sessions.data!, coach });
+    })();
+    return () => { cancelled = true; };
+    // Deliberately excludes `coach` — a coach refresh should not re-trigger a full OS reschedule;
+    // only a new calendar day (or an explicit settings change, handled separately) should.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [profile.data, items.data, sessions.data]);
 
   useEffect(() => {
     if (!isTauri) return;

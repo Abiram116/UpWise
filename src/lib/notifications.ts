@@ -88,7 +88,9 @@ export interface PlanInput {
   coach: CoachResult | null;
 }
 
-/** Re-plans the next 2 days of nudges. Safe to call often; it cancels and reschedules. */
+/** Re-plans the next 2 days of nudges. Safe to call often — every call reuses the same
+ * deterministic (day, slot) notification ids, so Android replaces rather than stacks them,
+ * even if the OS-level cancelAll() below happens to miss something. */
 export async function replanNotifications({ profile, items, sessions, coach }: PlanInput): Promise<number> {
   if (!isTauri) return 0;
   const s = settingsOf(profile);
@@ -103,16 +105,18 @@ export async function replanNotifications({ profile, items, sessions, coach }: P
   const visibleItems = items.filter((i) => !i.category || !s.muted_categories.includes(i.category.id));
   const now = new Date();
   let scheduled = 0;
-  let id = Math.floor(now.getTime() / 1000) % 100000;
 
   for (let dayOffset = 0; dayOffset < 2; dayOffset++) {
-    for (const h of hours) {
+    for (let slot = 0; slot < hours.length; slot++) {
+      const h = hours[slot];
       const at = new Date(now);
       at.setDate(now.getDate() + dayOffset);
       at.setHours(h, 30 - Math.floor(Math.random() * 20), 0, 0); // small jitter so it doesn't feel robotic
       if (at.getTime() < now.getTime() + 5 * 60_000) continue;
       const n = composeNudge(visibleItems, dayOffset === 0 ? coach : null, h);
-      id++;
+      // Fixed per (dayOffset, slot) id — the whole point is that re-planning the *same* slot
+      // always maps to the *same* notification id, so it gets replaced, never duplicated.
+      const id = 1000 + dayOffset * 10 + slot;
       if (isMobile()) {
         sendNotification({
           id, channelId: CHANNEL, title: n.title, body: n.body,
@@ -124,7 +128,6 @@ export async function replanNotifications({ profile, items, sessions, coach }: P
       }
       void logNotification({ item_id: n.itemId, kind: "nudge", title: n.title, body: n.body, scheduled_for: at.toISOString() });
       scheduled++;
-      if (scheduled >= s.max_per_day * 2) return scheduled;
     }
   }
   return scheduled;
