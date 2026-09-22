@@ -126,7 +126,17 @@ export function ItemDetailScreen() {
         </Block>
       )}
       {!!ai.prerequisites?.length && <Block title="You should already know"><ul className="prose">{ai.prerequisites.map((p) => <li key={p}>{p}</li>)}</ul></Block>}
-      {ai.overlap && <Block title="Overlap with your library"><p className="prose">{ai.overlap}</p></Block>}
+      {ai.overlap && (
+        <Block title="Overlap with your library">
+          <p className="prose">{ai.overlap}</p>
+          {!done && item.status !== "skipped" && (
+            <Pill variant="tonal" size="sm" style={{ marginTop: 10, alignSelf: "flex-start" }}
+              onClick={() => { void setStatus(item.id, "skipped"); toast("Skipped — already knew this one"); }}>
+              <SkipForward size={15} /> Skip, I know this
+            </Pill>
+          )}
+        </Block>
+      )}
       {!!ai.resources?.length && (
         <Block title="Resources mentioned">
           <div className="col" style={{ gap: 2 }}>
