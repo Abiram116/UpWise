@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { animate, motion } from "motion/react";
 import { useActivity, useItems, useProfile, useSessions } from "../lib/api";
-import { backlogHealth, byCategory, heatmap, streak, velocity, weekly } from "../lib/stats";
+import { backlogHealth, breakDaySet, byCategory, heatmap, streak, velocity, weekly } from "../lib/stats";
 import { fmtMinutes, pluralize } from "../lib/utils";
 import { Empty, ErrorState, Page, Rise, Skeleton, easeOut } from "../components/ui";
 
@@ -25,7 +25,7 @@ export function StatsScreen() {
     const weeks = weekly(activity.data, 8);
     return {
       heat: heatmap(activity.data, 12),
-      streak: streak(activity.data),
+      streak: streak(activity.data, breakDaySet(profile.data?.settings)),
       weeks,
       velocity: velocity(weeks),
       backlog: backlogHealth(items.data, weeks.slice(-4)),
@@ -34,7 +34,7 @@ export function StatsScreen() {
       totalDone: items.data.filter((i) => i.status === "completed").length,
       concepts: new Set(items.data.filter((i) => i.status === "completed").flatMap((i) => i.ai?.key_concepts ?? [])).size,
     };
-  }, [activity.data, items.data, sessions.data]);
+  }, [activity.data, items.data, sessions.data, profile.data]);
 
   if (activity.isError || items.isError) return <Page><h1 className="display">Progress</h1><ErrorState message={(activity.error ?? items.error)?.message ?? ""} onRetry={() => { activity.refetch(); items.refetch(); }} /></Page>;
   if (!data) return <Page><h1 className="display">Progress</h1><Skeleton h={120} r={28} /><Skeleton h={160} r={28} /></Page>;

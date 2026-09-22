@@ -82,7 +82,7 @@ Adapt your tone to their situation, using the ACTIVITY info below:
 If nothing in the backlog fits the available time well, still pick the shortest reasonable item as a genuine "quick win" rather than suggesting nothing or something too long — a few real minutes beats a skipped day. SHORTEST_AVAILABLE_MIN tells you the floor.
 
 Return STRICT JSON:
-{"pick_item_id": "uuid or null", "headline": "<=50 chars, no emoji", "message": "<=140 chars, specific, mentions the item and why now, in your adapted tone", "reason": "<=120 chars internal reasoning", "focus_category": "category name or null", "weak_spot": "one category they've been neglecting, or null"}
+{"pick_item_id": "uuid or null", "headline": "<=40 chars, no emoji", "message": "<=90 chars, one punchy sentence, specific, mentions the item and why now, in your adapted tone — cut every word that isn't pulling weight", "reason": "<=120 chars internal reasoning", "focus_category": "category name or null", "weak_spot": "one category they've been neglecting, or null"}
 If backlog is empty, headline/message should encourage saving something useful instead.`;
 
     const userMsg = [

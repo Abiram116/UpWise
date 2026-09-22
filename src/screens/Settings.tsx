@@ -1,11 +1,13 @@
 import { useEffect, useMemo, useState } from "react";
-import { Bell, ChevronRight, Copy, Download, FileText, Moon, RefreshCw, Target, User } from "lucide-react";
-import { useCategories, useProfile, useUpdateProfile, useItems, useSessions } from "../lib/api";
+import { Bell, ChevronRight, Coffee, Copy, Download, FileText, Moon, RefreshCw, Target, User } from "lucide-react";
+import { useActivity, useCategories, useProfile, useUpdateProfile, useItems, useSessions } from "../lib/api";
 import { replanNotifications, sendTestNotification, settingsOf } from "../lib/notifications";
 import { checkForUpdate, currentVersion, type UpdateInfo } from "../lib/updater";
 import { isTauri, platform } from "../lib/platform";
 import { applyTheme, type Theme } from "../theme";
-import { formatSkillsExport, skillsSummary } from "../lib/stats";
+import { formatSkillsExport, skillsSummary, isOnBreak } from "../lib/stats";
+import { isoDay } from "../lib/utils";
+import type { Profile } from "../lib/types";
 import { useCoach } from "./Home";
 import { Chip, Page, Pill, Rise, Segmented, Sheet, Switch, useToast } from "../components/ui";
 
@@ -18,6 +20,7 @@ export function SettingsScreen() {
   const cats = useCategories();
   const items = useItems();
   const sessions = useSessions(30);
+  const activity = useActivity(14);
   const toast = useToast();
   const { coach } = useCoach(false);
   const [version, setVersion] = useState("");
@@ -26,6 +29,7 @@ export function SettingsScreen() {
   const [progress, setProgress] = useState<number | null>(null);
   const [goalOpen, setGoalOpen] = useState(false);
   const [exportOpen, setExportOpen] = useState(false);
+  const [breakOpen, setBreakOpen] = useState(false);
   const [theme, setTheme] = useState<Theme>((localStorage.getItem("upwise:theme") as Theme) || "system");
 
   useEffect(() => { currentVersion().then(setVersion); }, []);
@@ -38,11 +42,12 @@ export function SettingsScreen() {
 
   const p = profile.data;
   const s = settingsOf(p);
-  const saveSettings = async (patch: Partial<typeof s>) => {
+  const onBreak = isOnBreak(p?.settings);
+  const saveSettings = async (patch: Partial<Profile["settings"]>) => {
     const next = { ...(p?.settings ?? {}), ...patch };
     await update.mutateAsync({ settings: next });
     if (p && items.data && sessions.data) {
-      const n = await replanNotifications({ profile: { ...p, settings: next }, items: items.data, sessions: sessions.data, coach });
+      const n = await replanNotifications({ profile: { ...p, settings: next }, items: items.data, sessions: sessions.data, coach, activity: activity.data });
       if (patch.enabled !== undefined) toast(patch.enabled ? `Nudges on · ${n} scheduled` : "Nudges off");
     }
   };
@@ -78,6 +83,18 @@ export function SettingsScreen() {
           <div className="grow title-sm">Appearance</div>
           <Segmented value={theme} onChange={(t) => { setTheme(t); applyTheme(t); }} options={[{ value: "system", label: "Auto" }, { value: "light", label: "Light" }, { value: "dark", label: "Dark" }]} />
         </div>
+        <button className="setting" onClick={() => setBreakOpen(true)}>
+          <span className="setting-icon"><Coffee size={18} /></span>
+          <div className="grow">
+            <div className="title-sm">{onBreak ? "On a break" : "Take a break"}</div>
+            <div className="meta">
+              {onBreak
+                ? p!.settings.break_until === "indefinite" ? "Until you resume" : `Until ${new Date(p!.settings.break_until as string).toLocaleDateString(undefined, { month: "short", day: "numeric" })}`
+                : "Pause nudges, keep your streak"}
+            </div>
+          </div>
+          <ChevronRight size={18} className="meta" />
+        </button>
       </Group>
 
       <Group title="Nudges" hint="Times come from when you actually learn. You stay in control.">
@@ -85,6 +102,10 @@ export function SettingsScreen() {
           <span className="setting-icon"><Bell size={18} /></span>
           <div className="grow"><div className="title-sm">Notifications</div><div className="meta">{isTauri ? "About what to learn next" : "Available in the installed app"}</div></div>
           <Switch on={s.enabled} onChange={(v) => saveSettings({ enabled: v })} label="Notifications" />
+        </div>
+        <div className="setting">
+          <div className="grow"><div className="title-sm">Weekly recap</div><div className="meta">Sunday evening — what you learned, streak, what's next</div></div>
+          <Switch on={!!p?.settings.weekly_recap} onChange={(v) => saveSettings({ weekly_recap: v })} label="Weekly recap" />
         </div>
         {s.enabled && (
           <>
@@ -132,6 +153,22 @@ export function SettingsScreen() {
         </button>
       </Group>
 
+      <Sheet open={breakOpen} onClose={() => setBreakOpen(false)} title={onBreak ? "On a break" : "Take a break"}>
+        <BreakEditor
+          settings={p?.settings ?? {}}
+          onStart={async (until, reason) => {
+            await saveSettings({ break_started: isoDay(), break_until: until, break_reason: reason || null });
+            setBreakOpen(false);
+            toast("Break started — nudges are off, your streak is safe");
+          }}
+          onEnd={async () => {
+            await saveSettings({ break_started: null, break_until: null, break_reason: null });
+            setBreakOpen(false);
+            toast("Welcome back");
+          }}
+        />
+      </Sheet>
+
       <Sheet open={goalOpen} onClose={() => setGoalOpen(false)} title="Your goal">
         <GoalEditor profile={p} onSave={async (goal, interests, name) => { await update.mutateAsync({ goal, interests, display_name: name }); setGoalOpen(false); toast("Saved"); }} />
       </Sheet>
@@ -176,6 +213,56 @@ function Group({ title, hint, children }: { title: string; hint?: string; childr
         {hint && <p className="meta" style={{ paddingLeft: 4 }}>{hint}</p>}
       </section>
     </Rise>
+  );
+}
+
+const BREAK_PRESETS: { label: string; days: number }[] = [
+  { label: "Tomorrow", days: 1 },
+  { label: "3 days", days: 3 },
+  { label: "1 week", days: 7 },
+];
+
+function BreakEditor({ settings, onStart, onEnd }: {
+  settings: Profile["settings"];
+  onStart: (until: string | "indefinite", reason: string) => Promise<void>;
+  onEnd: () => Promise<void>;
+}) {
+  const onBreak = isOnBreak(settings);
+  const [until, setUntil] = useState<string | "indefinite">("indefinite");
+  const [reason, setReason] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  if (onBreak) {
+    return (
+      <div className="col" style={{ gap: 14 }}>
+        <p className="body-lg">
+          {settings.break_until === "indefinite"
+            ? "No end date set — resume whenever you're ready."
+            : `Back on ${new Date(settings.break_until as string).toLocaleDateString(undefined, { weekday: "long", month: "short", day: "numeric" })}.`}
+        </p>
+        {settings.break_reason && <p className="meta">{settings.break_reason}</p>}
+        <Pill variant="filled" size="lg" loading={busy} onClick={async () => { setBusy(true); try { await onEnd(); } finally { setBusy(false); } }}>End break now</Pill>
+      </div>
+    );
+  }
+
+  const dayOption = (days: number) => { const d = new Date(); d.setDate(d.getDate() + days); return isoDay(d); };
+
+  return (
+    <div className="col" style={{ gap: 14 }}>
+      <p className="meta">Nudges go quiet and your streak won't break while you're away.</p>
+      <div className="chips">
+        {BREAK_PRESETS.map((preset) => (
+          <Chip key={preset.label} active={until === dayOption(preset.days)} onClick={() => setUntil(dayOption(preset.days))}>{preset.label}</Chip>
+        ))}
+        <Chip active={until === "indefinite"} onClick={() => setUntil("indefinite")}>Until I resume</Chip>
+      </div>
+      <div className="field">
+        <span className="label">Reason (optional)</span>
+        <input className="input" value={reason} onChange={(e) => setReason(e.target.value)} placeholder="Exams, travel, burnout..." />
+      </div>
+      <Pill variant="filled" size="lg" loading={busy} onClick={async () => { setBusy(true); try { await onStart(until, reason.trim()); } finally { setBusy(false); } }}>Start break</Pill>
+    </div>
   );
 }
 

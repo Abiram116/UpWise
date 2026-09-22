@@ -4,8 +4,10 @@ import android.content.Intent
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
+import android.webkit.JavascriptInterface
 import android.webkit.WebView
 import androidx.activity.enableEdgeToEdge
+import androidx.core.view.WindowInsetsControllerCompat
 import org.json.JSONObject
 
 class MainActivity : TauriActivity() {
@@ -28,7 +30,17 @@ class MainActivity : TauriActivity() {
   override fun onWebViewCreate(webView: WebView) {
     super.onWebViewCreate(webView)
     this.webView = webView
+    webView.addJavascriptInterface(NativeBridge(), "AndroidNative")
     pendingShare?.let { deliver(it) }
+  }
+
+  private inner class NativeBridge {
+    @JavascriptInterface
+    fun setLightStatusBar(light: Boolean) {
+      handler.post {
+        WindowInsetsControllerCompat(window, window.decorView).isAppearanceLightStatusBars = light
+      }
+    }
   }
 
   private fun handleShare(intent: Intent?) {

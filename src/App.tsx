@@ -1,8 +1,8 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { HashRouter, Route, Routes, useNavigate } from "react-router";
 import { AlertTriangle } from "lucide-react";
 import { useAuth } from "./hooks/useAuth";
-import { useItems, useProfile, useSessions, useSetStatus, markNotificationOpened } from "./lib/api";
+import { useActivity, useItems, useProfile, useSessions, useSetStatus, markNotificationOpened } from "./lib/api";
 import { replanNotifications, snoozeNotification } from "./lib/notifications";
 import { installShareBridge } from "./lib/share";
 import { isTauri } from "./lib/platform";
@@ -11,6 +11,7 @@ import { AppShell } from "./components/AppShell";
 import { WindowControls } from "./components/WindowControls";
 import { Spinner } from "./components/ui";
 import { Onboarding } from "./screens/Onboarding";
+import { PinGate } from "./screens/PinGate";
 import { HomeScreen, useCoach } from "./screens/Home";
 import { LibraryScreen } from "./screens/Library";
 import { ItemDetailScreen } from "./screens/ItemDetail";
@@ -27,13 +28,22 @@ export default function App() {
   );
 }
 
-function Gate() {
-  const { session, loading, error } = useAuth();
-  const profile = useProfile();
+const ONBOARDED_KEY = "upwise:onboarded";
 
-  if (loading || (session && profile.isLoading)) {
-    return <Center><Spinner size={26} /></Center>;
-  }
+function Gate() {
+  const { session, loading, error, needsPin } = useAuth();
+  const profile = useProfile(!!session);
+  // Read synchronously (not via the async Tauri store) so a returning user's app shell can
+  // paint on the very first render instead of waiting on a network profile fetch every cold start.
+  const [cachedOnboarded] = useState(() => { try { return localStorage.getItem(ONBOARDED_KEY) === "1"; } catch { return false; } });
+
+  useEffect(() => {
+    if (profile.data?.onboarded === undefined) return;
+    try { localStorage.setItem(ONBOARDED_KEY, profile.data.onboarded ? "1" : "0"); } catch { /* ignore */ }
+  }, [profile.data?.onboarded]);
+
+  if (loading) return <Center><Spinner size={26} /></Center>;
+  if (needsPin) return <PinGate />;
   if (error || !session) {
     return (
       <Center>
@@ -43,10 +53,14 @@ function Gate() {
       </Center>
     );
   }
-  if (profile.error) {
-    return <Center><p className="meta">{profile.error.message}</p></Center>;
+
+  const knownOnboarded = cachedOnboarded || profile.data?.onboarded === true;
+  if (!knownOnboarded) {
+    // No cached fast-path yet (first launch ever) — genuinely need the profile to decide.
+    if (profile.isLoading) return <Center><Spinner size={26} /></Center>;
+    if (profile.error) return <Center><p className="meta">{profile.error.message}</p></Center>;
+    if (!profile.data?.onboarded) return <><WindowControls /><Onboarding /></>;
   }
-  if (!profile.data?.onboarded) return <><WindowControls /><Onboarding /></>;
 
   return (
     <>
@@ -70,6 +84,7 @@ function Background() {
   const profile = useProfile();
   const items = useItems();
   const sessions = useSessions(30);
+  const activity = useActivity(14);
   const { coach } = useCoach(false);
   const setStatus = useSetStatus();
   const nav = useNavigate();
@@ -78,7 +93,7 @@ function Background() {
   const plannedRef = useRef<string>("");
 
   useEffect(() => {
-    if (!isTauri || !profile.data || !items.data || !sessions.data) return;
+    if (!isTauri || !profile.data || !items.data || !sessions.data || !activity.data) return;
     const today = new Date().toDateString();
     let cancelled = false;
     (async () => {
@@ -86,13 +101,13 @@ function Background() {
       if (cancelled || lastPlanned === today || plannedRef.current === today) return;
       plannedRef.current = today;
       await setPref("notifPlannedDate", today);
-      void replanNotifications({ profile: profile.data!, items: items.data!, sessions: sessions.data!, coach });
+      void replanNotifications({ profile: profile.data!, items: items.data!, sessions: sessions.data!, coach, activity: activity.data });
     })();
     return () => { cancelled = true; };
     // Deliberately excludes `coach` — a coach refresh should not re-trigger a full OS reschedule;
     // only a new calendar day (or an explicit settings change, handled separately) should.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [profile.data, items.data, sessions.data]);
+  }, [profile.data, items.data, sessions.data, activity.data]);
 
   useEffect(() => {
     if (!isTauri) return;

@@ -5,30 +5,24 @@ import { ensurePermission, sendTestNotification } from "../lib/notifications";
 import { isAndroid, isTauri } from "../lib/platform";
 import { DEFAULT_NOTIFICATIONS } from "../lib/config";
 import { Chip, Pill, easeOut, spring } from "../components/ui";
+import { BrandMark } from "../components/BrandMark";
 
 const GOALS = ["AI Engineer", "ML Engineer", "Backend Engineer", "Full-stack Engineer", "Data Scientist"];
 const INTERESTS = ["LLMs", "RAG", "Agents", "Fine-tuning", "MLOps", "DSA", "System Design", "Python", "Cloud", "Math for ML", "Frontend", "Career"];
 const TARGETS = [15, 30, 45, 60];
 
-const wordsIn = { hidden: {}, show: { transition: { staggerChildren: 0.06, delayChildren: 0.9 } } };
+const wordsIn = { hidden: {}, show: { transition: { staggerChildren: 0.03, delayChildren: 0 } } };
 const word = { hidden: { opacity: 0, y: 18, filter: "blur(6px)" }, show: { opacity: 1, y: 0, filter: "blur(0px)", transition: { duration: 0.5, ease: [0.05, 0.7, 0.1, 1] as const } } };
 
 function Welcome({ name }: { name?: string | null }) {
   const title = `Hi${name ? ` ${name}` : ""}. Stop hoarding links.`;
   return (
     <div className="col" style={{ gap: 28 }}>
-      <motion.svg width="88" height="88" viewBox="0 0 88 88" fill="none" initial="hidden" animate="show">
-        <motion.rect x="2" y="2" width="84" height="84" rx="26" fill="var(--primary-container)"
-          variants={{ hidden: { scale: 0.6, opacity: 0 }, show: { scale: 1, opacity: 1, transition: { type: "spring", stiffness: 260, damping: 22 } } }} style={{ transformOrigin: "44px 44px" }} />
-        <motion.path d="M30 58 L56 32" stroke="var(--on-primary-container)" strokeWidth="6" strokeLinecap="round"
-          variants={{ hidden: { pathLength: 0, opacity: 0 }, show: { pathLength: 1, opacity: 1, transition: { delay: 0.35, duration: 0.55, ease: [0.05, 0.7, 0.1, 1] } } }} />
-        <motion.path d="M40 31 L58 31 L58 49" stroke="var(--on-primary-container)" strokeWidth="6" strokeLinecap="round" strokeLinejoin="round" fill="none"
-          variants={{ hidden: { pathLength: 0, opacity: 0 }, show: { pathLength: 1, opacity: 1, transition: { delay: 0.7, duration: 0.4, ease: [0.05, 0.7, 0.1, 1] } } }} />
-      </motion.svg>
+      <BrandMark />
       <motion.h1 className="display" variants={wordsIn} initial="hidden" animate="show" style={{ display: "flex", flexWrap: "wrap", gap: "0 0.28em" }}>
         {title.split(" ").map((w, i) => <motion.span key={i} variants={word}>{w}</motion.span>)}
       </motion.h1>
-      <motion.p className="body-lg" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ ...easeOut, delay: 1.6 }}>
+      <motion.p className="body-lg" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ ...easeOut, delay: 0.2 }}>
         Every reel or video you'd normally dump into Telegram goes here instead. UpWise reads it, tells you what it actually teaches, and how long it really takes.
         {isAndroid() && <><br /><br />In YouTube, tap <b style={{ fontWeight: 500, color: "var(--on-surface)" }}>Share → UpWise</b>. That's the whole workflow.</>}
       </motion.p>

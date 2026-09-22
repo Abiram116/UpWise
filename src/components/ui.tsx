@@ -2,6 +2,7 @@ import { AnimatePresence, motion, useReducedMotion, type Variants, type Transiti
 import { createContext, useCallback, useContext, useEffect, useRef, useState, type ButtonHTMLAttributes, type MouseEvent, type ReactNode } from "react";
 import { Check, X } from "lucide-react";
 import { cx } from "../lib/utils";
+import { haptic } from "../lib/haptics";
 
 // ---------- motion presets ----------
 export const spring: Transition = { type: "spring", stiffness: 420, damping: 36, mass: 0.8 };
@@ -42,7 +43,7 @@ export function Pill({ variant = "tonal", size = "md", block, icon, loading, cla
       transition={{ type: "spring", stiffness: 600, damping: 30 }}
       className={cx("pill", `pill-${variant}`, size !== "md" && `pill-${size}`, block && "pill-block", icon && "pill-icon", className)}
       disabled={disabled || loading}
-      onClick={(e) => { ripple(e); onClick?.(e); }}
+      onClick={(e) => { ripple(e); haptic.tap(); onClick?.(e); }}
       {...(rest as object)}
     >
       {loading ? <Spinner /> : children}
@@ -67,7 +68,7 @@ export function Chip({ children, tone, active, onClick, className }: {
 }) {
   if (onClick) {
     return (
-      <motion.button whileTap={{ scale: 0.95 }} transition={spring} className={cx("chip chip-btn", className)} data-active={active} onClick={onClick}>
+      <motion.button whileTap={{ scale: 0.95 }} transition={spring} className={cx("chip chip-btn", className)} data-active={active} onClick={() => { haptic.tap(); onClick(); }}>
         {active && <Check size={14} strokeWidth={2.5} />}{children}
       </motion.button>
     );
@@ -80,7 +81,7 @@ export function Dots({ n, of = 5 }: { n: number | null; of?: number }) {
 }
 
 export function Switch({ on, onChange, label }: { on: boolean; onChange: (v: boolean) => void; label?: string }) {
-  return <button role="switch" aria-checked={on} aria-label={label} className="switch" data-on={on} onClick={() => onChange(!on)} />;
+  return <button role="switch" aria-checked={on} aria-label={label} className="switch" data-on={on} onClick={() => { haptic.tap(); onChange(!on); }} />;
 }
 
 export function Segmented<T extends string>({ value, onChange, options }: { value: T; onChange: (v: T) => void; options: { value: T; label: string }[] }) {

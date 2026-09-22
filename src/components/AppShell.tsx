@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { NavLink, Outlet, useLocation, useNavigate } from "react-router";
 import { AnimatePresence, motion } from "motion/react";
 import { ArrowUpRight, BarChart3, Home, Library, Plus, Settings } from "lucide-react";
@@ -35,6 +35,12 @@ export function AppShell() {
   const loc = useLocation();
   const [addOpen, setAddOpen] = useState(false);
   const showFab = loc.pathname === "/" || loc.pathname === "/library";
+  const mainRef = useRef<HTMLElement>(null);
+
+  // .app-main persists across routes (only the Outlet's child remounts), so its scroll
+  // position otherwise carries over — opening an item from partway down the list would
+  // land already scrolled. Reset it on every navigation.
+  useEffect(() => { mainRef.current?.scrollTo(0, 0); }, [loc.pathname]);
 
   return (
     <div className="app">
@@ -46,7 +52,7 @@ export function AppShell() {
         {dests.map((d) => <Dest key={d.to} {...d} layoutId="rail-pill" />)}
       </aside>
 
-      <main className="app-main">
+      <main className="app-main" ref={mainRef}>
         <AnimatePresence mode="wait" initial={false}>
           <div key={loc.pathname.split("/")[1] || "home"}><Outlet /></div>
         </AnimatePresence>

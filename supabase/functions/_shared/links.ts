@@ -13,6 +13,7 @@ export interface LinkMeta {
   transcript: string | null;
   content: string | null; // article body / any extra text for the model
   transcriptStatus?: string; // diagnostics: ok | no_tracks:<playability> | caption_fetch_failed:<err> | ...
+  videoUrl?: string | null; // direct video file, when the page exposes one (Instagram reels)
 }
 
 const YT_ID = /^[A-Za-z0-9_-]{11}$/;
@@ -250,10 +251,25 @@ export async function fetchInstagram(canonicalUrl: string, externalId: string | 
     if (title && !/^login/i.test(title) && !/instagram$/i.test(title.trim())) meta.title = title;
     if (desc && !/log in to see/i.test(desc)) meta.description = desc;
     meta.thumbnailUrl = metaTag(html, "og:image");
+    meta.videoUrl = metaTag(html, "og:video:secure_url") ?? metaTag(html, "og:video");
     const who = title?.match(/^(.*?) on Instagram/);
     if (who) meta.channel = who[1];
   } catch { /* login-walled; caller will rely on the user's note */ }
   return meta;
+}
+
+// Crude readability: drop chrome tags, prefer <article>/<main>, keep only real paragraph-ish
+// text blocks. Good enough as a last-resort fallback when Jina Reader can't read a page either.
+function extractReadableText(html: string): string | null {
+  const stripped = html.replace(/<(script|style|nav|header|footer|aside|noscript|form)\b[^>]*>[\s\S]*?<\/\1>/gi, " ");
+  const scoped = stripped.match(/<article\b[^>]*>([\s\S]*?)<\/article>/i)?.[1]
+    ?? stripped.match(/<main\b[^>]*>([\s\S]*?)<\/main>/i)?.[1]
+    ?? stripped;
+  const blocks = [...scoped.matchAll(/<(p|li|h[1-6])\b[^>]*>([\s\S]*?)<\/\1>/gi)]
+    .map((m) => decodeEntities(m[2].replace(/<[^>]+>/g, " ")).replace(/\s+/g, " ").trim())
+    .filter((t) => t.length > 40);
+  const text = blocks.join("\n\n");
+  return text.length > 200 ? text : null;
 }
 
 export async function fetchArticle(canonicalUrl: string): Promise<LinkMeta> {
@@ -261,7 +277,7 @@ export async function fetchArticle(canonicalUrl: string): Promise<LinkMeta> {
     source: "article", canonicalUrl, externalId: null, title: null, description: null, channel: null,
     thumbnailUrl: null, durationSeconds: null, tags: [], transcript: null, content: null,
   };
-  // Jina Reader turns any page into clean markdown, no key needed.
+  // Jina Reader turns any page (including most PDFs) into clean markdown, no key needed.
   try {
     const r = await fetch(`https://r.jina.ai/${canonicalUrl}`, {
       headers: { Accept: "text/plain", "X-Return-Format": "markdown" },
@@ -271,19 +287,33 @@ export async function fetchArticle(canonicalUrl: string): Promise<LinkMeta> {
       const t = text.match(/^Title:\s*(.+)$/m);
       if (t) meta.title = t[1].trim();
       const body = text.replace(/^(Title|URL Source|Published Time|Markdown Content):.*$/gm, "").trim();
-      meta.content = body.slice(0, 40_000);
+      if (body.length > 100) { meta.content = body.slice(0, 40_000); meta.transcriptStatus = "jina_ok"; }
     }
   } catch { /* fall through */ }
+
   if (!meta.title || !meta.content) {
     try {
       const r = await fetch(canonicalUrl, { headers: { "User-Agent": UA } });
-      const html = await r.text();
-      meta.title ??= metaTag(html, "og:title") ?? html.match(/<title[^>]*>([^<]*)<\/title>/i)?.[1]?.trim() ?? null;
-      meta.description = metaTag(html, "og:description") ?? metaTag(html, "description");
-      meta.thumbnailUrl = metaTag(html, "og:image");
-      meta.channel = metaTag(html, "og:site_name");
+      const contentType = r.headers.get("content-type") ?? "";
+      const isPdf = contentType.includes("pdf") || /\.pdf(?:[?#]|$)/i.test(canonicalUrl);
+      if (isPdf) {
+        // Jina already had its shot above; a raw PDF fetch isn't text we can parse here.
+        meta.transcriptStatus ??= "pdf_unsupported";
+      } else {
+        const html = await r.text();
+        meta.title ??= metaTag(html, "og:title") ?? html.match(/<title[^>]*>([^<]*)<\/title>/i)?.[1]?.trim() ?? null;
+        meta.description = metaTag(html, "og:description") ?? metaTag(html, "description");
+        meta.thumbnailUrl = metaTag(html, "og:image");
+        meta.channel = metaTag(html, "og:site_name");
+        if (!meta.content) {
+          const readable = extractReadableText(html);
+          if (readable) { meta.content = readable.slice(0, 40_000); meta.transcriptStatus = "readability_fallback"; }
+        }
+      }
     } catch { /* ignore */ }
   }
+
+  if (!meta.content && !meta.transcriptStatus) meta.transcriptStatus = "unreadable";
   try { meta.channel ??= new URL(canonicalUrl).hostname.replace(/^www\./, ""); } catch { /* ignore */ }
   return meta;
 }

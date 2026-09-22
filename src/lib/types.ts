@@ -66,7 +66,13 @@ export interface Profile {
   goal: string;
   interests: string[];
   daily_target_minutes: number;
-  settings: Partial<NotificationSettings> & { theme?: "system" | "light" | "dark" };
+  settings: Partial<NotificationSettings> & {
+    theme?: "system" | "light" | "dark";
+    break_until?: string | "indefinite" | null; // ISO day (inclusive) or "indefinite", null = not on a break
+    break_started?: string | null; // ISO day the current/last break began, for streak neutrality
+    break_reason?: string | null;
+    weekly_recap?: boolean;
+  };
   onboarded: boolean;
 }
 

@@ -1,6 +1,24 @@
 import { AuthError, corsHeaders, json, userClient } from "../_shared/auth.ts";
 import { fetchArticle, fetchInstagram, fetchYouTube, type LinkMeta, parseLink } from "../_shared/links.ts";
-import { groqJson, MODELS } from "../_shared/groq.ts";
+import { groqJson, groqTranscribe, MODELS } from "../_shared/groq.ts";
+
+const MAX_VIDEO_BYTES = 20_000_000; // Groq's transcription upload cap is 25MB; leave headroom.
+
+async function tryTranscribeInstagram(meta: LinkMeta): Promise<void> {
+  if (!meta.videoUrl) return;
+  try {
+    const r = await fetch(meta.videoUrl);
+    if (!r.ok || !r.body) { meta.transcriptStatus = `video_fetch_failed:${r.status}`; return; }
+    const len = Number(r.headers.get("content-length") ?? "0");
+    if (len > MAX_VIDEO_BYTES) { meta.transcriptStatus = "video_too_large"; return; }
+    const buf = new Uint8Array(await r.arrayBuffer());
+    if (buf.byteLength === 0 || buf.byteLength > MAX_VIDEO_BYTES) { meta.transcriptStatus = "video_too_large"; return; }
+    meta.transcript = await groqTranscribe(buf, "reel.mp4");
+    meta.transcriptStatus = "whisper_ok";
+  } catch (e) {
+    meta.transcriptStatus = `whisper_failed:${(e as Error).message.slice(0, 60)}`;
+  }
+}
 
 interface Analysis {
   title: string;
@@ -104,7 +122,10 @@ Deno.serve(async (req) => {
     if (parsed.source === "youtube") {
       meta = await fetchYouTube(parsed.externalId!, Deno.env.get("YOUTUBE_API_KEY"), !!clientTranscript);
       if (clientTranscript) { meta.transcript = clientTranscript; meta.transcriptStatus = "client"; }
-    } else if (parsed.source === "instagram") meta = await fetchInstagram(parsed.canonicalUrl, parsed.externalId);
+    } else if (parsed.source === "instagram") {
+      meta = await fetchInstagram(parsed.canonicalUrl, parsed.externalId);
+      await tryTranscribeInstagram(meta);
+    }
     else meta = await fetchArticle(parsed.canonicalUrl);
 
     let ai: Partial<Analysis> & { model?: string; error?: string } = {};

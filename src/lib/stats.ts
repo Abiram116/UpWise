@@ -1,5 +1,24 @@
-import type { DailyActivity, Item, LearningSession } from "./types";
+import type { DailyActivity, Item, LearningSession, Profile } from "./types";
 import { isoDay, pluralize } from "./utils";
+
+export function isOnBreak(settings: Profile["settings"] | undefined, today = isoDay()): boolean {
+  const until = settings?.break_until;
+  if (!until) return false;
+  return until === "indefinite" || today <= until;
+}
+
+/** Days covered by the current/last declared break, for treating them as streak-neutral. */
+export function breakDaySet(settings: Profile["settings"] | undefined): Set<string> {
+  const days = new Set<string>();
+  const started = settings?.break_started;
+  if (!started) return days;
+  const today = isoDay();
+  const end = settings?.break_until === "indefinite" || !settings?.break_until
+    ? today
+    : settings.break_until < today ? settings.break_until : today;
+  for (let d = new Date(started); isoDay(d) <= end; d.setDate(d.getDate() + 1)) days.add(isoDay(d));
+  return days;
+}
 
 export interface HeatCell { day: string; level: 0 | 1 | 2 | 3 | 4; minutes: number; completed: number }
 
@@ -22,18 +41,22 @@ export function heatmap(activity: DailyActivity[], weeks = 12): HeatCell[] {
   return cells;
 }
 
-export function streak(activity: DailyActivity[]): { current: number; best: number } {
+export function streak(activity: DailyActivity[], breakDays?: Set<string>): { current: number; best: number } {
   const active = new Set(activity.filter((a) => a.seconds > 0 || a.completed > 0).map((a) => a.day));
+  const neutral = breakDays ?? new Set<string>();
   let current = 0;
   const d = new Date();
-  if (!active.has(isoDay(d))) d.setDate(d.getDate() - 1); // today not yet counted, streak still alive from yesterday
-  while (active.has(isoDay(d))) { current++; d.setDate(d.getDate() - 1); }
+  if (!active.has(isoDay(d)) && !neutral.has(isoDay(d))) d.setDate(d.getDate() - 1); // today not yet counted, streak still alive from yesterday
+  while (active.has(isoDay(d)) || neutral.has(isoDay(d))) {
+    if (active.has(isoDay(d))) current++;
+    d.setDate(d.getDate() - 1);
+  }
 
   let best = 0, run = 0, prev: Date | null = null;
-  for (const day of [...active].sort()) {
+  for (const day of [...new Set([...active, ...neutral])].sort()) {
     const cur = new Date(day);
-    run = prev && cur.getTime() - prev.getTime() === 86400e3 ? run + 1 : 1;
-    best = Math.max(best, run);
+    if (!prev || cur.getTime() - prev.getTime() !== 86400e3) run = 0;
+    if (active.has(day)) { run++; best = Math.max(best, run); }
     prev = cur;
   }
   return { current, best: Math.max(best, current) };
@@ -88,6 +111,14 @@ export function backlogHealth(items: Item[], weeks: WeekStat[]) {
     growing: net < 0,
     weeksToClear,
   };
+}
+
+/** Items sitting untouched for a while — never started, still inbox/queued. Oldest first. */
+export function neglectedItems(items: Item[], days = 14): Item[] {
+  const cutoff = Date.now() - days * 86400e3;
+  return items
+    .filter((i) => (i.status === "inbox" || i.status === "queued") && !i.started_at && new Date(i.created_at).getTime() < cutoff)
+    .sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
 }
 
 export interface CategoryStat { id: string; name: string; completed: number; pending: number; minutes: number; lastDone: string | null; neglectedDays: number | null }

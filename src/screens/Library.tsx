@@ -1,13 +1,17 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "react-router";
 import { motion } from "motion/react";
-import { Search } from "lucide-react";
-import { useCategories, useItems } from "../lib/api";
-import type { ItemStatus } from "../lib/types";
+import { Search, Trash2, X } from "lucide-react";
+import { useCategories, useItems, useSetStatus, useDeleteItem } from "../lib/api";
+import { neglectedItems } from "../lib/stats";
+import { getPref, setPref } from "../lib/store";
+import { relativeTime, pluralize } from "../lib/utils";
+import type { Item, ItemStatus } from "../lib/types";
 import { ItemRow } from "../components/ItemCard";
-import { Chip, Empty, ErrorState, Page, Rise, Segmented, Skeleton, stagger } from "../components/ui";
+import { Chip, Empty, ErrorState, Page, Pill, Rise, Segmented, Sheet, Skeleton, stagger, useToast } from "../components/ui";
 
 type Filter = "todo" | "done" | "all";
+const GROOM_SNOOZE_DAYS = 7;
 
 export function LibraryScreen() {
   const items = useItems();
@@ -16,6 +20,19 @@ export function LibraryScreen() {
   const [q, setQ] = useState("");
   const filter = (params.get("f") as Filter) || "todo";
   const cat = params.get("cat");
+  const [groomOpen, setGroomOpen] = useState(false);
+  const [groomSnoozed, setGroomSnoozed] = useState(true); // assume snoozed until pref loads, to avoid a flash
+
+  const neglected = useMemo(() => neglectedItems(items.data ?? []), [items.data]);
+
+  useEffect(() => {
+    getPref<number>("groomSnoozeUntil", 0).then((until) => setGroomSnoozed(Date.now() < until));
+  }, []);
+
+  const dismissGroom = () => {
+    setGroomSnoozed(true);
+    void setPref("groomSnoozeUntil", Date.now() + GROOM_SNOOZE_DAYS * 86400e3);
+  };
 
   const list = useMemo(() => {
     let l = items.data ?? [];
@@ -54,6 +71,19 @@ export function LibraryScreen() {
     <Page>
       <Rise><header><h1 className="display">Library</h1></header></Rise>
 
+      {!groomSnoozed && neglected.length > 0 && (
+        <Rise>
+          <div className="slab row" style={{ alignItems: "center", gap: 12 }}>
+            <div className="grow">
+              <div className="title-sm">{pluralize(neglected.length, "item")} waiting 2+ weeks</div>
+              <div className="meta">Worth a quick keep-or-clear pass?</div>
+            </div>
+            <Pill variant="tonal" onClick={() => setGroomOpen(true)}>Review</Pill>
+            <button aria-label="Dismiss" className="pill pill-text pill-icon" onClick={dismissGroom}><X size={16} /></button>
+          </div>
+        </Rise>
+      )}
+
       <Rise>
         <div className="col" style={{ gap: 12 }}>
           <div className="searchbar">
@@ -82,6 +112,36 @@ export function LibraryScreen() {
           {list.map((i) => <ItemRow key={i.id} item={i} />)}
         </motion.div>
       )}
+
+      <Sheet open={groomOpen} onClose={() => { setGroomOpen(false); dismissGroom(); }} title="Waiting a while">
+        <div className="col" style={{ gap: 4 }}>
+          {neglected.length === 0
+            ? <p className="meta">All caught up.</p>
+            : neglected.map((i) => <GroomRow key={i.id} item={i} />)}
+        </div>
+      </Sheet>
     </Page>
+  );
+}
+
+function GroomRow({ item }: { item: Item }) {
+  const setStatus = useSetStatus();
+  const del = useDeleteItem();
+  const toast = useToast();
+  const [gone, setGone] = useState(false);
+  if (gone) return null;
+  return (
+    <motion.div layout className="row" style={{ gap: 10, padding: "10px 4px", alignItems: "center", borderBottom: "1px solid var(--surface-high)" }}>
+      <div className="grow col" style={{ gap: 2 }}>
+        <div className="truncate" style={{ fontSize: 14.5, fontWeight: 500 }}>{item.title ?? item.url}</div>
+        <div className="meta">Saved {relativeTime(item.created_at)}</div>
+      </div>
+      <Pill variant="text" size="sm" onClick={() => setGone(true)}>Keep</Pill>
+      <Pill variant="tonal" size="sm" onClick={async () => { await setStatus(item.id, "skipped"); setGone(true); }}>Skip</Pill>
+      <button aria-label="Delete" className="pill pill-text pill-icon" style={{ color: "var(--error)" }}
+        onClick={async () => { await del.mutateAsync(item.id); setGone(true); toast("Deleted"); }}>
+        <Trash2 size={16} />
+      </button>
+    </motion.div>
   );
 }

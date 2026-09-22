@@ -4,7 +4,7 @@ import { motion } from "motion/react";
 import { useQuery } from "@tanstack/react-query";
 import { Flame, Play, RefreshCw } from "lucide-react";
 import { fetchCoach, useActivity, useItems, useProfile } from "../lib/api";
-import { heuristicPick, streak, todayMinutes, backlogHealth, weekly } from "../lib/stats";
+import { heuristicPick, streak, todayMinutes, backlogHealth, weekly, isOnBreak, breakDaySet } from "../lib/stats";
 import { getPref, setPref } from "../lib/store";
 import { COACH_TTL_MS } from "../lib/config";
 import { fmtMinutes, greeting, pluralize } from "../lib/utils";
@@ -43,7 +43,8 @@ export function HomeScreen() {
   }, [coach, pending, items.data]);
   const coached = !!(coach && pick && coach.pick_item_id === pick.id);
 
-  const st = activity.data ? streak(activity.data) : null;
+  const onBreak = isOnBreak(profile.data?.settings);
+  const st = activity.data ? streak(activity.data, breakDaySet(profile.data?.settings)) : null;
   const today = activity.data ? todayMinutes(activity.data) : 0;
   const target = profile.data?.daily_target_minutes ?? 30;
   const health = items.data && activity.data ? backlogHealth(items.data, weekly(activity.data, 4)) : null;
@@ -96,24 +97,34 @@ export function HomeScreen() {
       )}
 
       <Rise>
-        <div className="col" style={{ gap: 10 }}>
-          <div className="row between">
-            <span className="title-sm">Today</span>
-            <span className="meta num"><b style={{ color: "var(--on-surface)", fontWeight: 500 }}>{today}</b> / {target} min</span>
-          </div>
-          <div className="bar">
-            <motion.i initial={{ width: 0 }} animate={{ width: `${Math.min(100, (today / target) * 100)}%` }} transition={{ ...easeOut, duration: 0.7 }}
-              style={{ background: today >= target ? "var(--primary)" : undefined }} />
-          </div>
-          {health && health.pending > 0 && (
+        {onBreak ? (
+          <div className="col" style={{ gap: 4 }}>
+            <span className="title-sm">On a break</span>
             <p className="meta">
-              {pluralize(health.pending, "item")} · ~{fmtMinutes(health.pendingMinutes)} waiting.{" "}
-              {health.growing
-                ? <span style={{ color: "var(--warm)" }}>Saving {health.savedPerWeek}/wk, finishing {health.donePerWeek}/wk — it's growing.</span>
-                : health.weeksToClear ? `Clears in ~${pluralize(health.weeksToClear, "week")} at this pace.` : ""}
+              {profile.data?.settings.break_until === "indefinite" ? "Until you resume — no rush." : `Until ${new Date(profile.data!.settings.break_until as string).toLocaleDateString(undefined, { month: "short", day: "numeric" })}.`}
+              {profile.data?.settings.break_reason ? ` ${profile.data.settings.break_reason}` : ""} Your streak's safe.
             </p>
-          )}
-        </div>
+          </div>
+        ) : (
+          <div className="col" style={{ gap: 10 }}>
+            <div className="row between">
+              <span className="title-sm">Today</span>
+              <span className="meta num"><b style={{ color: "var(--on-surface)", fontWeight: 500 }}>{today}</b> / {target} min</span>
+            </div>
+            <div className="bar">
+              <motion.i initial={{ width: 0 }} animate={{ width: `${Math.min(100, (today / target) * 100)}%` }} transition={{ ...easeOut, duration: 0.7 }}
+                style={{ background: today >= target ? "var(--primary)" : undefined }} />
+            </div>
+            {health && health.pending > 0 && (
+              <p className="meta">
+                {pluralize(health.pending, "item")} · ~{fmtMinutes(health.pendingMinutes)} waiting.{" "}
+                {health.growing
+                  ? <span style={{ color: "var(--warm)" }}>Saving {health.savedPerWeek}/wk, finishing {health.donePerWeek}/wk — it's growing.</span>
+                  : health.weeksToClear ? `Clears in ~${pluralize(health.weeksToClear, "week")} at this pace.` : ""}
+              </p>
+            )}
+          </div>
+        )}
       </Rise>
 
       {inProgress.length > 0 && <Section title="In progress" items={inProgress} />}

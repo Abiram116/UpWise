@@ -4,10 +4,10 @@ import {
 } from "@tauri-apps/plugin-notification";
 import { isAndroid, isMobile, isTauri } from "./platform";
 import { DEFAULT_NOTIFICATIONS } from "./config";
-import { activeHours, heuristicPick } from "./stats";
+import { activeHours, breakDaySet, heuristicPick, isOnBreak, streak, weekly } from "./stats";
 import { logNotification } from "./api";
-import { parseTime, pluralize } from "./utils";
-import type { CoachResult, Item, LearningSession, NotificationSettings, Profile } from "./types";
+import { fmtMinutes, parseTime, pluralize } from "./utils";
+import type { CoachResult, DailyActivity, Item, LearningSession, NotificationSettings, Profile } from "./types";
 
 const CHANNEL = "upwise-nudges";
 let desktopTimers: number[] = [];
@@ -101,20 +101,57 @@ export interface PlanInput {
   items: Item[];
   sessions: LearningSession[];
   coach: CoachResult | null;
+  activity?: DailyActivity[];
+}
+
+const WEEKLY_RECAP_ID = 800;
+
+/** Next Sunday 19:00 — this week's if it hasn't passed yet, otherwise next week's. */
+function nextRecapTime(now: Date): Date {
+  const at = new Date(now);
+  at.setDate(now.getDate() + ((7 - now.getDay()) % 7));
+  at.setHours(19, 0, 0, 0);
+  if (at.getTime() < now.getTime() + 5 * 60_000) at.setDate(at.getDate() + 7);
+  return at;
+}
+
+function planWeeklyRecap(profile: Profile, activity: DailyActivity[]) {
+  if (!profile.settings.weekly_recap) return;
+  const now = new Date();
+  const at = nextRecapTime(now);
+  const w = weekly(activity, 1)[0];
+  const st = streak(activity, breakDaySet(profile.settings));
+  const body = w && (w.completed > 0 || w.minutes > 0)
+    ? `${pluralize(w.completed, "thing")} learned, ${fmtMinutes(w.minutes)} this week${st.current > 0 ? ` · ${st.current}-day streak` : ""}.`
+    : "A quiet week — no pressure. Pick something small when you're ready.";
+  const title = "Your week in review";
+  if (isMobile()) {
+    sendNotification({ id: WEEKLY_RECAP_ID, channelId: CHANNEL, title, body, schedule: Schedule.at(at, false, true), autoCancel: true });
+  } else {
+    const t = window.setTimeout(() => sendNotification({ title, body }), at.getTime() - now.getTime());
+    desktopTimers.push(t);
+  }
+  void logNotification({ item_id: null, kind: "weekly_recap", title, body, scheduled_for: at.toISOString() });
 }
 
 /** Re-plans the next 2 days of nudges. Safe to call often — every call reuses the same
  * deterministic (day, slot) notification ids, so Android replaces rather than stacks them,
  * even if the OS-level cancelAll() below happens to miss something. */
-export async function replanNotifications({ profile, items, sessions, coach }: PlanInput): Promise<number> {
+export async function replanNotifications({ profile, items, sessions, coach, activity }: PlanInput): Promise<number> {
   if (!isTauri) return 0;
   const s = settingsOf(profile);
   for (const t of desktopTimers) clearTimeout(t);
   desktopTimers = [];
   try { await cancelAll(); } catch { /* not supported on some platforms */ }
-  if (!s.enabled) return 0;
+  const onBreak = isOnBreak(profile.settings);
+  const wantsNudges = s.enabled && !onBreak;
+  const wantsRecap = !!profile.settings.weekly_recap && !onBreak && !!activity;
+  if (!wantsNudges && !wantsRecap) return 0;
   if (!(await ensurePermission())) return 0;
   await ensureChannel();
+
+  if (wantsRecap) planWeeklyRecap(profile, activity!);
+  if (!wantsNudges) return 0;
 
   const hours = pickHours(s, sessions);
   const visibleItems = items.filter((i) => !i.category || !s.muted_categories.includes(i.category.id));

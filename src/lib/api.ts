@@ -8,7 +8,7 @@ import type { Category, CoachResult, DailyActivity, Item, ItemStatus, LearningSe
 const ITEM_SELECT = "*, category:categories(id, name, slug, color)";
 
 // ---------- profile ----------
-export function useProfile() {
+export function useProfile(enabled = true) {
   return useQuery({
     queryKey: ["profile"],
     queryFn: async (): Promise<Profile> => {
@@ -17,6 +17,7 @@ export function useProfile() {
       return data as Profile;
     },
     staleTime: 60_000,
+    enabled,
   });
 }
 

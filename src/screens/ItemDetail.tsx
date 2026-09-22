@@ -6,6 +6,7 @@ import { ArrowLeft, Check, ChevronDown, ExternalLink, ListPlus, Play, SkipForwar
 import { logManualMinutes, useCategories, useDeleteItem, useItem, useSetStatus, useUpdateItem } from "../lib/api";
 import { isDesktop, isTauri } from "../lib/platform";
 import { confidence, fmtDuration, fmtMinutes, relativeTime, STATUS_LABEL } from "../lib/utils";
+import { haptic } from "../lib/haptics";
 import { useActiveSession, useSessionStore } from "../components/SessionBar";
 import { Chip, Dots, Page, Pill, Rise, Sheet, Skeleton, spring, useToast } from "../components/ui";
 import { useQueryClient } from "@tanstack/react-query";
@@ -198,6 +199,7 @@ export function ItemDetailScreen() {
           qc.invalidateQueries({ queryKey: ["activity"] });
           qc.invalidateQueries({ queryKey: ["sessions"] });
           setFinishPromptOpen(false);
+          haptic.success();
           toast("Marked as learned");
         }} />
     </Page>
