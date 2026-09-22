@@ -4,10 +4,10 @@ Living backlog of things to build next. Nothing here is built yet — this is th
 
 ## 1. Bugs & core UX (do these first)
 
-- **Add-sheet gets stuck.** It currently blocks closing while analyzing (`Sheet onClose: busy ? () => {} : close`) to protect the in-flight request. If the WebView suspends while backgrounded and resumes oddly, you're stuck behind an unclosable scrim. Fix: let the sheet be dismissed anytime; the analyze call keeps running in the background and finishes with a toast, like a normal upload notification instead of a blocking modal.
+- [x] **Add-sheet gets stuck.** ~~It currently blocks closing while analyzing~~ Fixed: the sheet can be dismissed anytime now; the analyze call keeps running in the background (each attempt tracked by id) and reports via toast on completion instead of blocking the screen. Verified in the desktop build — dismiss mid-analysis unblocks the UI immediately, the item still lands in the library, reopening shows a clean form.
 - **Status bar invisible in light mode.** Edge-to-edge is on but nothing tells Android to switch status bar icons to dark when the app background is light. Native fix: `setAppearanceLightStatusBars`, toggled whenever the theme changes.
 - **App icon missing on both platforms.** Icons are correctly embedded (verified via `apksigner` and file inspection) — Windows was a cache issue, needs confirming after a clean reinstall. Android needs investigating separately — likely an adaptive-icon safe-zone/masking issue. Do a clean uninstall/reinstall on both, verify with a real screenshot.
-- **Copy audit.** Remove any leftover YouTube-only phrasing ("add a YT link" style text) — should read as source-agnostic everywhere since YouTube, Instagram, and articles all work.
+- [x] **Copy audit.** Checked all "add link" copy — already source-agnostic everywhere except the Home empty-state, which leaned YouTube-first; broadened to mention YouTube/Instagram/paste evenly.
 
 ## 2. Content reliability
 
