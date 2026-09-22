@@ -60,9 +60,13 @@ jobs:
         with: { node-version: 22, cache: npm }
       - uses: actions/setup-java@v4
         with: { distribution: temurin, java-version: 17 }
-      - uses: android-actions/setup-android@v3
-      - name: Install NDK
-        run: sdkmanager "ndk;27.0.12077973" "platforms;android-34" "build-tools;34.0.0"
+      # ubuntu-latest runners ship with the Android SDK preinstalled (ANDROID_HOME already set) —
+      # android-actions/setup-android@v3 is unmaintained and fails trying to install the
+      # long-removed legacy "tools" package, so we just use sdkmanager that's already on PATH.
+      - name: Install SDK packages + NDK
+        run: |
+          yes | sdkmanager --licenses > /dev/null
+          sdkmanager "platform-tools" "platforms;android-34" "build-tools;34.0.0" "ndk;27.0.12077973"
       - uses: dtolnay/rust-toolchain@stable
         with: { targets: aarch64-linux-android }
       - uses: swatinem/rust-cache@v2
