@@ -5,7 +5,7 @@ import { openUrl } from "@tauri-apps/plugin-opener";
 import { ArrowLeft, Check, ChevronDown, ExternalLink, ListPlus, Play, SkipForward, Trash2, Clock } from "lucide-react";
 import { logManualMinutes, useCategories, useDeleteItem, useItem, useSetStatus, useUpdateItem } from "../lib/api";
 import { isDesktop, isTauri } from "../lib/platform";
-import { fmtDuration, fmtMinutes, relativeTime, STATUS_LABEL } from "../lib/utils";
+import { confidence, fmtDuration, fmtMinutes, relativeTime, STATUS_LABEL } from "../lib/utils";
 import { useActiveSession, useSessionStore } from "../components/SessionBar";
 import { Chip, Dots, Page, Pill, Rise, Sheet, Skeleton, spring, useToast } from "../components/ui";
 import { useQueryClient } from "@tanstack/react-query";
@@ -38,6 +38,7 @@ export function ItemDetailScreen() {
   const isActive = active?.itemId === item.id;
   const embed = item.source === "youtube" && item.external_id && isDesktop();
   const done = item.status === "completed";
+  const trust = confidence(item);
 
   const finish = async () => {
     if (isActive) await stop(true); else await setStatus(item.id, "completed");
@@ -50,7 +51,10 @@ export function ItemDetailScreen() {
       <Rise>
         <div className="row between">
           <Pill variant="text" size="sm" onClick={() => nav(-1)} style={{ marginLeft: -14 }}><ArrowLeft size={18} /> Back</Pill>
-          <Chip tone={done ? "primary" : undefined}>{STATUS_LABEL[item.status]}</Chip>
+          <div className="row" style={{ gap: 6 }}>
+            {trust && <Chip tone={trust.tone}>{trust.label}</Chip>}
+            <Chip tone={done ? "primary" : undefined}>{STATUS_LABEL[item.status]}</Chip>
+          </div>
         </div>
       </Rise>
 

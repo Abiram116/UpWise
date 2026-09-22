@@ -98,3 +98,10 @@ export function parseTime(hhmm: string): number {
 export function pluralize(n: number, one: string, many = `${one}s`): string {
   return `${n} ${n === 1 ? one : many}`;
 }
+
+/** Honest-confidence signal: did the AI actually have real source text, or just a title? */
+export function confidence(item: Item): { label: string; tone: "warm" | "error" } | null {
+  if (item.ai?.error) return { label: "AI unavailable", tone: "error" };
+  if (!item.has_transcript) return { label: "Limited info", tone: "warm" };
+  return null;
+}

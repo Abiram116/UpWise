@@ -144,7 +144,9 @@ Deno.serve(async (req) => {
       thumbnail_url: meta.thumbnailUrl,
       duration_seconds: meta.durationSeconds,
       transcript: meta.transcript,
-      has_transcript: !!meta.transcript,
+      // Name says "transcript" but this really means "had substantial source text to analyze from" —
+      // covers article body text too, so the UI can show a trust badge when analysis worked from just a title.
+      has_transcript: !!(meta.transcript || meta.content),
       category_id: categoryId,
       tags: (ai.tags ?? []).slice(0, 8).map((t) => String(t).toLowerCase().slice(0, 30)),
       status: "inbox",

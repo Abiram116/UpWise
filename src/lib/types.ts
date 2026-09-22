@@ -92,6 +92,6 @@ export interface CoachResult {
   reason: string;
   focus_category: string | null;
   weak_spot: string | null;
-  stats: { minutes28: number; completed28: number; added28: number; activeDays: number };
+  stats: { minutes28: number; completed28: number; added28: number; activeDays: number; daysSinceActive: number | null };
   fetched_at?: number;
 }
