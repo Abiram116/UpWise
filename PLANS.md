@@ -14,7 +14,7 @@ Living backlog of things to build next. Nothing here is built yet — this is th
 - **Instagram Reels — actually fixable.** Pull the public video URL, extract audio, transcribe with Groq Whisper, run it through the same pipeline as YouTube. Real transcript instead of a guess.
 - **Instagram carousel posts — capped by no-login access.** Can't read slide 2+ without Instagram auth (out of scope). Instead: detect it's a carousel, prompt harder for a note, stop pretending confidence.
 - **Articles — fallback chain.** Jina Reader → direct fetch + readability extraction → explicit "couldn't read this" instead of a thin guess. Handle PDFs and paywalls explicitly.
-- **"Limited info" trust badge.** Whenever an item's analysis worked from just a title (no transcript/content), show a small badge on the card and detail page instead of presenting full confident output. Visibility over false confidence — this is the direct fix for "information isn't reliable."
+- [x] **"Limited info" trust badge.** Done: `has_transcript` now also covers extracted article text (was silently false for every article before), and a new `confidence()` helper shows "Limited info" / "AI unavailable" on the item row and detail page whenever analysis worked from just a title. Verified against real seeded items — badge appears exactly where it should.
 
 ## 3. Performance
 
@@ -28,7 +28,7 @@ Living backlog of things to build next. Nothing here is built yet — this is th
 
 ## 5. Companion / personalization
 
-- **Context-aware home message.** The coach should feel like it knows you, not read a generic line. Needs: days since last session, recent topics/categories, and explicit tone branches — welcoming re-entry after a break (4+ days quiet, not guilt), leaning in during a hot streak, mentioning a growing backlog without nagging daily, quiet mode during a declared break.
+- [x] **Context-aware home message.** Done: coach now knows days since your last session/completion and what you recently finished, with explicit tone branches (warm re-entry after 4+ quiet days, lean in on a streak, simple first-message welcome, mention a growing backlog only when it's a real problem). Verified via test-coach.mjs against the real account. Still open: quiet mode during a declared break, which depends on streak-freeze below.
 - **Streak freeze / take a break mode.** Settings gets a "Take a break" action — pick a date range (or "until I resume"), optional reason. No artificial limits, it's just you. Streak logic treats break days as neutral (doesn't break the streak, doesn't demand the daily target). Notifications go silent automatically. Home shows "On a break until [date]" instead of a guilt-inducing progress bar.
 
 ## 6. Notifications
@@ -40,9 +40,9 @@ Living backlog of things to build next. Nothing here is built yet — this is th
 
 - **Batch import from Telegram.** Paste a wall of old links at once; the app queues and analyzes them all — makes migrating an existing Telegram backlog painless instead of one-at-a-time.
 - **Backlog grooming prompt.** Anything sitting unopened 14+ days gets surfaced with an explicit keep/skip/delete decision instead of silently piling up forever.
-- **Always-have-a-quick-win.** Coach logic guarantees at least one sub-10-minute item is always ready to suggest, for nights with only a few minutes.
-- **Skills export for resume/portfolio.** Generated summary of what's been learned, grouped by category, copyable for LinkedIn/resume — this project doubles as an AI Engineer prep record.
-- **Duplicate/overlap quick action.** When AI flags overlap with something already in the library, a one-tap "skip, I know this" instead of just a text note.
+- [x] **Always-have-a-quick-win.** Done: coach prompt now guarantees the shortest reasonable item gets suggested when nothing fits the available time well, rather than suggesting nothing. Bundled with the context-aware message change above.
+- [x] **Skills export for resume/portfolio.** Done: Settings → Export → Skills summary, grouped by category with deduplicated AI-extracted key concepts, copy-to-clipboard. Verified live with real completed items across two categories.
+- [x] **Duplicate/overlap quick action.** Done: one-tap "Skip, I know this" pill under the overlap note on the detail page. Verified live — seeded a genuinely overlapping video, confirmed Groq flagged it, tapped the button, status updated correctly.
 
 ## 8. Docs
 
