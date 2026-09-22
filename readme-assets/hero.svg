@@ -1,0 +1,28 @@
+<svg width="900" height="280" viewBox="0 0 900 280" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <!-- left: links piling up, ignored -->
+  <rect x="55" y="145" width="120" height="76" rx="20" fill="#9a5b2a" opacity="0.3"/>
+  <rect x="85" y="112" width="120" height="76" rx="20" fill="#9a5b2a" opacity="0.5"/>
+  <rect x="115" y="78" width="128" height="80" rx="22" fill="#9a5b2a" opacity="0.78"/>
+  <rect x="135" y="102" width="72" height="8" rx="4" fill="#f5dcc4"/>
+  <rect x="135" y="118" width="52" height="8" rx="4" fill="#f5dcc4"/>
+
+  <!-- connecting flow -->
+  <path d="M 260 150 L 400 150" stroke="#2f6a52" stroke-width="3" stroke-linecap="round" stroke-dasharray="2 14" opacity="0.45"/>
+
+  <!-- brand mark -->
+  <rect x="400" y="96" width="108" height="108" rx="32" fill="#cfe7da"/>
+  <path d="M 428 168 L 462 132" stroke="#0f3325" stroke-width="7" stroke-linecap="round"/>
+  <path d="M 440 131 L 464 131 L 464 155" stroke="#0f3325" stroke-width="7" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+
+  <!-- connecting flow -->
+  <path d="M 508 150 L 620 150" stroke="#2f6a52" stroke-width="3" stroke-linecap="round" stroke-dasharray="2 14" opacity="0.45"/>
+
+  <!-- right: actually learned -->
+  <rect x="620" y="70" width="220" height="160" rx="28" fill="#ffffff" stroke="#e2ded6" stroke-width="2"/>
+  <rect x="648" y="98" width="130" height="10" rx="5" fill="#1c1b1a" opacity="0.85"/>
+  <rect x="648" y="118" width="90" height="8" rx="4" fill="#67635d" opacity="0.6"/>
+  <rect x="648" y="150" width="164" height="14" rx="7" fill="#eae6df"/>
+  <rect x="648" y="150" width="108" height="14" rx="7" fill="#2f6a52"/>
+  <circle cx="792" cy="98" r="16" fill="#cfe7da"/>
+  <path d="M 785 98 L 790 103 L 800 91" stroke="#0f3325" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+</svg>

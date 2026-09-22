@@ -54,4 +54,4 @@ Living backlog of things to build next. Nothing here is built yet — this is th
 
 ## 8. Docs
 
-- **README rewrite.** Lead with the actual story (final-year student, Telegram link-hoarding problem, built this to fix it) instead of a feature dump. Keep setup/dev commands short, pushed toward the bottom. Add custom SVG illustrations in the same Material 3 tonal language already used in the app (sage/apricot palette, squircle/pill shapes, no stock icons) so the README visually matches the product.
+- [x] **README rewrite.** Done: leads with the actual Telegram link-hoarding story instead of a feature dump, two custom SVG illustrations (`readme-assets/hero.svg`, `readme-assets/flow.svg`) hand-drawn in the app's exact tonal palette (sage `#2f6a52`/`#cfe7da`, apricot `#9a5b2a`/`#f5dcc4`) and squircle/pill shape language, no stock icons. Setup/dev/release commands kept but pushed to the bottom; `VITE_APP_PASSWORD` reference removed from the secrets table (obsolete since the PIN gate change).
