@@ -146,10 +146,10 @@ export function HomeScreen() {
             </div>
             {health && health.pending > 0 && (
               <p className="meta">
-                {pluralize(health.pending, "item")} · ~{fmtMinutes(health.pendingMinutes)} waiting.{" "}
+                {pluralize(health.pending, "item")} left to learn, about {fmtMinutes(health.pendingMinutes)} in total.{" "}
                 {health.growing
-                  ? <span style={{ color: "var(--warm)" }}>Saving {health.savedPerWeek}/wk, finishing {health.donePerWeek}/wk — it's growing.</span>
-                  : health.weeksToClear ? `Clears in ~${pluralize(health.weeksToClear, "week")} at this pace.` : ""}
+                  ? <span style={{ color: "var(--warm)" }}>Lately you save {health.savedPerWeek} a week and finish {health.donePerWeek}, so the list keeps growing.</span>
+                  : health.weeksToClear ? `At your current pace you'll clear it in about ${pluralize(health.weeksToClear, "week")}.` : ""}
               </p>
             )}
           </div>

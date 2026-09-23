@@ -1,4 +1,4 @@
-import { AnimatePresence, motion, useReducedMotion, type Variants, type Transition } from "motion/react";
+import { AnimatePresence, motion, useDragControls, useReducedMotion, type Variants, type Transition } from "motion/react";
 import { createContext, useCallback, useContext, useEffect, useRef, useState, type ButtonHTMLAttributes, type MouseEvent, type ReactNode } from "react";
 import { Check, X } from "lucide-react";
 import { cx } from "../lib/utils";
@@ -100,6 +100,9 @@ export function Sheet({ open, onClose, children, title, className }: { open: boo
   const reduce = useReducedMotion();
   const isDesk = typeof window !== "undefined" && window.matchMedia("(min-width: 840px)").matches;
   useBackHandler(open, onClose);
+  // Swipe-to-close starts only from the grip/title strip. Listening on the whole sheet
+  // swallowed every touch, so long content (transcripts) couldn't scroll on Android.
+  const drag = useDragControls();
   useEffect(() => {
     if (!open) return;
     const onKey = (e: KeyboardEvent) => e.key === "Escape" && onClose();
@@ -117,16 +120,19 @@ export function Sheet({ open, onClose, children, title, className }: { open: boo
             animate={reduce ? { opacity: 1 } : isDesk ? { opacity: 1, scale: 1, x: "-50%", y: "-50%" } : { y: 0 }}
             exit={reduce ? { opacity: 0 } : isDesk ? { opacity: 0, scale: 0.98, x: "-50%", y: "-47%" } : { y: "100%" }}
             transition={{ type: "spring", stiffness: 380, damping: 36, mass: 0.9 }}
-            drag={isDesk || reduce ? false : "y"} dragConstraints={{ top: 0 }} dragElastic={{ top: 0, bottom: 0.5 }}
+            drag={isDesk || reduce ? false : "y"} dragListener={false} dragControls={drag}
+            dragConstraints={{ top: 0 }} dragElastic={{ top: 0, bottom: 0.5 }}
             onDragEnd={(_, info) => { if (info.offset.y > 100 || info.velocity.y > 700) onClose(); }}
           >
-            <div className="sheet-grip" />
-            {title && (
-              <div className="row between" style={{ marginBottom: 18 }}>
-                <h3 className="headline-sm">{title}</h3>
-                <button className="pill pill-text pill-icon pill-sm hide-mobile" onClick={onClose} aria-label="Close"><X size={18} /></button>
-              </div>
-            )}
+            <div className="sheet-handle" onPointerDown={(e) => { if (!isDesk && !reduce) drag.start(e); }}>
+              <div className="sheet-grip" />
+              {title && (
+                <div className="row between" style={{ paddingBottom: 18 }}>
+                  <h3 className="headline-sm">{title}</h3>
+                  <button className="pill pill-text pill-icon pill-sm hide-mobile" onClick={onClose} aria-label="Close"><X size={18} /></button>
+                </div>
+              )}
+            </div>
             {children}
           </motion.div>
         </>

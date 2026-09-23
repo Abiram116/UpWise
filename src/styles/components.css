@@ -176,6 +176,10 @@ select.input { padding-right: 36px; appearance: none; -webkit-appearance: none; 
   max-height: 92dvh; overflow-y: auto; overflow-x: hidden;
 }
 .sheet .col > * { min-width: 0; }
+.sheet { overscroll-behavior: contain; }
+/* The drag strip: touch-action none so the browser hands this gesture to the drag instead of
+   scrolling; everything below it scrolls natively. */
+.sheet-handle { touch-action: none; margin: -12px calc(-1 * var(--gutter)) 0; padding: 12px var(--gutter) 0; position: sticky; top: -12px; z-index: 1; background: inherit; }
 .sheet-grip { width: 32px; height: 4px; border-radius: 999px; background: var(--on-surface-3); opacity: 0.5; margin: 0 auto 18px; }
 @media (min-width: 840px) {
   .sheet { left: 50%; top: 50%; bottom: auto; right: auto; width: min(520px, calc(100vw - 48px)); transform: translate(-50%, -50%); border-radius: var(--r-slab); padding: var(--s-6) var(--s-7); max-height: 86vh; background: var(--surface-mid); }
