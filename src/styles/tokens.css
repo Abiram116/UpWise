@@ -51,8 +51,11 @@
   --dur: 240ms;
   --dur-slow: 400ms;
 
-  --safe-top: env(safe-area-inset-top, 0px);
-  --safe-bottom: env(safe-area-inset-bottom, 0px);
+  /* MainActivity.kt sets --native-safe-* from real WindowInsets pixel values on Android, since
+     env(safe-area-inset-*) is unreliable in this WebView — falls back to env()/0 elsewhere. */
+  --safe-top: var(--native-safe-top, env(safe-area-inset-top, 0px));
+  --safe-bottom: var(--native-safe-bottom, env(safe-area-inset-bottom, 0px));
+  --keyboard-inset: var(--native-keyboard-inset, 0px);
 }
 
 @media (prefers-color-scheme: dark) {

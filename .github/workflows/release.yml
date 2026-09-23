@@ -32,6 +32,25 @@ jobs:
   create-release:
     runs-on: ubuntu-latest
     steps:
+      - uses: actions/checkout@v4
+        with: { fetch-depth: 0 } # need full history + all tags to diff against the previous release
+      # generate_release_notes relies on merged PRs, which this repo doesn't use (direct
+      # pushes to master) - it was silently producing zero actual bullets, just a bare
+      # "Full Changelog" link. Build the notes from commit messages instead.
+      - name: Build changelog from commits since the last tag
+        id: changelog
+        run: |
+          PREV_TAG=$(git tag --sort=-v:refname | grep -v "^${{ github.ref_name }}$" | head -1)
+          if [ -z "$PREV_TAG" ]; then
+            LOG=$(git log --pretty=format:'- %s' "${{ github.ref_name }}")
+          else
+            LOG=$(git log --pretty=format:'- %s' "$PREV_TAG..${{ github.ref_name }}")
+          fi
+          {
+            echo "notes<<CHANGELOG_EOF"
+            echo "$LOG"
+            echo "CHANGELOG_EOF"
+          } >> "$GITHUB_OUTPUT"
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
@@ -39,7 +58,9 @@ jobs:
           name: "UpWise ${{ github.ref_name }}"
           body: |
             Windows: run the .exe installer (auto-updates from now on). Android: install the .apk.
-          generate_release_notes: true
+
+            ## What's changed
+            ${{ steps.changelog.outputs.notes }}
           draft: false
           prerelease: false
 

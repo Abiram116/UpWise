@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
-import { Bell, ChevronRight, Coffee, Copy, Download, FileText, Merge, Moon, RefreshCw, Target, User } from "lucide-react";
-import { useActivity, useCategories, useMergeCategories, useProfile, useUpdateProfile, useItems, useSessions } from "../lib/api";
+import { Bell, ChevronRight, Coffee, Copy, CopyCheck, Download, FileText, Moon, RefreshCw, Target, User } from "lucide-react";
+import { useActivity, useCategories, useProfile, useUpdateProfile, useItems, useSessions } from "../lib/api";
 import { replanNotifications, sendTestNotification, settingsOf } from "../lib/notifications";
 import { checkForUpdate, currentVersion, type UpdateInfo } from "../lib/updater";
 import { isTauri, platform } from "../lib/platform";
@@ -8,6 +8,7 @@ import { RELEASE_REPO } from "../lib/config";
 import { applyTheme, type Theme } from "../theme";
 import { formatSkillsExport, skillsSummary, isOnBreak } from "../lib/stats";
 import { isoDay } from "../lib/utils";
+import { extractNotes } from "../lib/changelog";
 import type { Profile } from "../lib/types";
 import { useCoach } from "./Home";
 import { Chip, Page, Pill, Rise, Segmented, Sheet, Switch, useToast } from "../components/ui";
@@ -30,7 +31,6 @@ export function SettingsScreen() {
   const [progress, setProgress] = useState<number | null>(null);
   const [goalOpen, setGoalOpen] = useState(false);
   const [exportOpen, setExportOpen] = useState(false);
-  const [mergeOpen, setMergeOpen] = useState(false);
   const [breakOpen, setBreakOpen] = useState(false);
   const [theme, setTheme] = useState<Theme>((localStorage.getItem("upwise:theme") as Theme) || "system");
 
@@ -147,15 +147,13 @@ export function SettingsScreen() {
         </button>
       </Group>
 
-      {(cats.data?.length ?? 0) >= 2 && (
-        <Group title="Library">
-          <button className="setting" onClick={() => setMergeOpen(true)}>
-            <span className="setting-icon"><Merge size={18} /></span>
-            <div className="grow"><div className="title-sm">Merge categories</div><div className="meta">For when two ended up meaning the same thing</div></div>
-            <ChevronRight size={18} className="meta" />
-          </button>
-        </Group>
-      )}
+      <Group title="Library">
+        <div className="setting">
+          <span className="setting-icon"><CopyCheck size={18} /></span>
+          <div className="grow"><div className="title-sm">Warn about similar saves</div><div className="meta">Flag likely duplicates when you save something new</div></div>
+          <Switch on={p.settings.warn_duplicates !== false} onChange={(v) => update.mutate({ settings: { ...p.settings, warn_duplicates: v } })} label="Warn about similar saves" />
+        </div>
+      </Group>
 
       <Group title="App">
         <button className="setting" onClick={doCheck} disabled={checking || !isTauri}>
@@ -199,15 +197,15 @@ export function SettingsScreen() {
         </div>
       </Sheet>
 
-      <Sheet open={mergeOpen} onClose={() => setMergeOpen(false)} title="Merge categories">
-        <MergeCategoriesEditor categories={cats.data ?? []} onDone={() => setMergeOpen(false)} />
-      </Sheet>
-
       <Sheet open={!!upd && upd !== "none"} onClose={() => setUpd(null)} title={`Update to v${upd !== "none" && upd ? upd.version : ""}`}>
         {upd && upd !== "none" && (
           <div className="col" style={{ gap: 14 }}>
             <p className="meta">You're on v{upd.current}.</p>
-            {upd.notes && <p className="body selectable" style={{ whiteSpace: "pre-wrap", maxHeight: 200, overflow: "auto" }}>{upd.notes}</p>}
+            {(() => { const notes = extractNotes(upd.notes ?? ""); return notes.length > 0 && (
+              <ul className="whatsnew-list" style={{ maxHeight: 200, overflow: "auto" }}>
+                {notes.map((n, i) => <li key={i}>{n}</li>)}
+              </ul>
+            ); })()}
             {upd.apkUrl
               ? <p className="meta">Downloads in the background, then opens the installer automatically — tap Update on the next screen.</p>
               : <p className="meta">The app will close to install. Windows sometimes silently blocks the installer (no code-signing certificate) — if it doesn't reopen on v{upd.version} within a minute, grab the installer manually from <a href={`https://github.com/${RELEASE_REPO}/releases/latest`} target="_blank" rel="noreferrer" style={{ color: "var(--primary)" }}>the latest release</a>.</p>}
@@ -231,45 +229,6 @@ function Group({ title, hint, children }: { title: string; hint?: string; childr
         {hint && <p className="meta" style={{ paddingLeft: 4 }}>{hint}</p>}
       </section>
     </Rise>
-  );
-}
-
-function MergeCategoriesEditor({ categories, onDone }: { categories: { id: string; name: string }[]; onDone: () => void }) {
-  const [fromId, setFromId] = useState(categories[0]?.id ?? "");
-  const [toId, setToId] = useState(categories[1]?.id ?? "");
-  const [busy, setBusy] = useState(false);
-  const merge = useMergeCategories();
-  const toast = useToast();
-
-  const from = categories.find((c) => c.id === fromId);
-  const to = categories.find((c) => c.id === toId);
-  const valid = from && to && fromId !== toId;
-
-  return (
-    <div className="col" style={{ gap: 14 }}>
-      <p className="meta">Every item in the first category moves into the second, and the first category is deleted. Can't be undone.</p>
-      <div className="field">
-        <span className="label">Merge this one</span>
-        <select className="input" value={fromId} onChange={(e) => setFromId(e.target.value)}>
-          {categories.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
-        </select>
-      </div>
-      <div className="field">
-        <span className="label">Into this one</span>
-        <select className="input" value={toId} onChange={(e) => setToId(e.target.value)}>
-          {categories.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
-        </select>
-      </div>
-      <Pill variant="danger" size="lg" disabled={!valid} loading={busy} onClick={async () => {
-        if (!valid) return;
-        setBusy(true);
-        try { await merge.mutateAsync({ fromId, toId }); toast(`Merged "${from!.name}" into "${to!.name}"`); onDone(); }
-        catch (e) { toast((e as Error).message); }
-        finally { setBusy(false); }
-      }}>
-        Merge "{from?.name ?? "…"}" into "{to?.name ?? "…"}"
-      </Pill>
-    </div>
   );
 }
 

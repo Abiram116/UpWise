@@ -39,7 +39,7 @@ export function PinGate() {
   }, [pin, busy, unlock]);
 
   return (
-    <div className="onboard" style={{ overflow: "hidden" }}>
+    <div className="onboard" style={{ overflow: "hidden", minHeight: "calc(100dvh - var(--keyboard-inset))" }}>
       <div className="onboard-body" style={{ alignItems: "center", textAlign: "center" }}>
         <BrandMark />
         <motion.h1 className="display" variants={wordsIn} initial="hidden" animate="show" style={{ display: "flex", flexWrap: "wrap", justifyContent: "center", gap: "0 0.28em" }}>

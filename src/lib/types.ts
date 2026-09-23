@@ -74,6 +74,7 @@ export interface Profile {
     break_started?: string | null; // ISO day the current/last break began, for streak neutrality
     break_reason?: string | null;
     weekly_recap?: boolean;
+    warn_duplicates?: boolean; // default true — flag likely-duplicate saves at save-time
   };
   onboarded: boolean;
 }

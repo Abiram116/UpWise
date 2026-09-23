@@ -26,10 +26,15 @@ function markActive(version: string) {
 
 function shouldRelock(version: string): boolean {
   try {
-    const lastAt = Number(localStorage.getItem(LAST_ACTIVE_KEY) ?? "0");
-    if (!lastAt) return false; // never recorded — first run, nothing to compare against
+    // This is only ever reached when a persisted session already exists (a true fresh
+    // install has none, and goes straight to needsPin instead) — so no prior baseline on
+    // this device is itself proof this build is the first to ever run here, i.e. an update
+    // just happened. Same bootstrapping mistake WhatsNewGate had; fixed the same way: treat
+    // "no baseline" as "needs to re-verify", not "skip it".
     const lastVersion = localStorage.getItem(LAST_VERSION_KEY);
-    if (lastVersion && lastVersion !== version) return true;
+    if (lastVersion !== version) return true;
+    const lastAt = Number(localStorage.getItem(LAST_ACTIVE_KEY) ?? "0");
+    if (!lastAt) return true;
     return Date.now() - lastAt > RELOCK_AFTER_MS;
   } catch { return false; }
 }

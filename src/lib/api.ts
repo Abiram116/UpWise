@@ -65,27 +65,6 @@ export function useCategories() {
   });
 }
 
-/** Moves every item from one category to another, then deletes the now-empty source category.
- * For when the AI has ended up creating two categories that really mean the same thing. */
-export function useMergeCategories() {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: async ({ fromId, toId }: { fromId: string; toId: string }) => {
-      const { data: toCat, error: catErr } = await supabase.from("categories").select("id, name, slug, color").eq("id", toId).single();
-      if (catErr) throw catErr;
-      const { error: moveErr } = await supabase.from("items").update({ category_id: toId }).eq("category_id", fromId);
-      if (moveErr) throw moveErr;
-      const { error: delErr } = await supabase.from("categories").delete().eq("id", fromId);
-      if (delErr) throw delErr;
-      return toCat as Category;
-    },
-    onSuccess: (toCat, { fromId }) => {
-      qc.setQueryData<Category[]>(["categories"], (old) => old?.filter((c) => c.id !== fromId));
-      qc.setQueryData<Item[]>(["items"], (old) => old?.map((i) => (i.category_id === fromId ? { ...i, category_id: toCat.id, category: toCat } : i)));
-    },
-  });
-}
-
 export function useUpdateItem() {
   const qc = useQueryClient();
   return useMutation({

@@ -2,7 +2,7 @@ import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { useNavigate } from "react-router";
 import { AnimatePresence, motion } from "motion/react";
 import { AlertCircle, ArrowRight, Play, WifiOff } from "lucide-react";
-import { useAnalyze, useCategories, useSetStatus, useUpdateItem, type AnalyzeStage } from "../lib/api";
+import { useAnalyze, useCategories, useProfile, useSetStatus, useUpdateItem, type AnalyzeStage } from "../lib/api";
 import { extractUrl, fmtMinutes, detectSource, SOURCE_LABEL } from "../lib/utils";
 import { looksOffline, queueOfflineSave } from "../lib/offlineQueue";
 import type { Item } from "../lib/types";
@@ -149,10 +149,11 @@ function ResultCard({ result, onDone }: { result: { item: Item; duplicate: boole
   const update = useUpdateItem();
   const setStatus = useSetStatus();
   const cats = useCategories();
+  const profile = useProfile();
   const start = useSessionStore((s) => s.start);
   const [cat, setCat] = useState(item.category?.id ?? null);
   const [dupSkipped, setDupSkipped] = useState(false);
-  const possibleDup = item.ai?.possible_duplicate;
+  const possibleDup = profile.data?.settings.warn_duplicates !== false ? item.ai?.possible_duplicate : null;
 
   const changeCat = async (id: string) => {
     setCat(id);

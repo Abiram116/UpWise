@@ -11,11 +11,14 @@ import android.os.Bundle
 import android.os.Environment
 import android.os.Handler
 import android.os.Looper
+import android.provider.Settings
 import android.util.Log
 import android.view.HapticFeedbackConstants
 import android.webkit.JavascriptInterface
 import android.webkit.WebView
 import androidx.activity.enableEdgeToEdge
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
 import org.json.JSONObject
 
@@ -52,6 +55,24 @@ class MainActivity : TauriActivity() {
     } else {
       @Suppress("UnspecifiedRegisterReceiverFlag")
       registerReceiver(downloadReceiver, filter)
+    }
+
+    // CSS env(safe-area-inset-*) is unreliable in this WebView under edge-to-edge (confirmed
+    // live: the status-bar scrim and the PIN screen's keyboard handling both silently did
+    // nothing) — read real inset pixel values natively and push them to the page directly
+    // instead of trusting the WebView to report them itself.
+    ViewCompat.setOnApplyWindowInsetsListener(window.decorView) { _, insets ->
+      val density = resources.displayMetrics.density
+      val statusBar = insets.getInsets(WindowInsetsCompat.Type.statusBars()).top / density
+      val navBar = insets.getInsets(WindowInsetsCompat.Type.navigationBars()).bottom / density
+      val keyboard = insets.getInsets(WindowInsetsCompat.Type.ime()).bottom / density
+      webView?.evaluateJavascript(
+        "document.documentElement.style.setProperty('--native-safe-top','${statusBar}px');" +
+          "document.documentElement.style.setProperty('--native-safe-bottom','${navBar}px');" +
+          "document.documentElement.style.setProperty('--native-keyboard-inset','${keyboard}px');",
+        null,
+      )
+      insets
     }
   }
 
@@ -112,6 +133,26 @@ class MainActivity : TauriActivity() {
           pendingDownloadId = dm.enqueue(request)
         } catch (e: Exception) {
           Log.e("UpWise", "downloadAndInstall failed", e)
+        }
+      }
+    }
+
+    // Whether the OS will let this app launch an installer at all — separate from a runtime
+    // permission dialog, it's a per-app toggle the user grants via a dedicated Settings screen.
+    @JavascriptInterface
+    fun canInstallPackages(): Boolean {
+      return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) packageManager.canRequestPackageInstalls() else true
+    }
+
+    // Deep-links straight to this app's "Install unknown apps" toggle, so onboarding can offer
+    // to get it out of the way up front instead of surprising the user mid-update.
+    @JavascriptInterface
+    fun openInstallPermissionSettings() {
+      handler.post {
+        try {
+          startActivity(Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES, Uri.parse("package:$packageName")))
+        } catch (e: Exception) {
+          Log.e("UpWise", "openInstallPermissionSettings failed", e)
         }
       }
     }

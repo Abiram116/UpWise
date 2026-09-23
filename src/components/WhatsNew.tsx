@@ -1,28 +1,21 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { AnimatePresence, motion } from "motion/react";
+import { Bell } from "lucide-react";
+import { isPermissionGranted } from "@tauri-apps/plugin-notification";
 import { currentVersion } from "../lib/updater";
 import { RELEASE_REPO } from "../lib/config";
 import { haptic } from "../lib/haptics";
 import { isTauri } from "../lib/platform";
+import { ensurePermission } from "../lib/notifications";
+import { extractNotes } from "../lib/changelog";
 import { BrandMark } from "./BrandMark";
 import { Pill, spring, easeOut } from "./ui";
 
 const SEEN_KEY = "upwise:lastSeenVersion";
 
-// GitHub's auto-generated notes look like "* fix: thing by @user in <url>" (or similar) plus
-// a "## What's Changed" heading and a "**Full Changelog**" footer — keep just the human part.
-function extractNotes(body: string): string[] {
-  return body
-    .split("\n")
-    .map((l) => l.trim())
-    .filter((l) => l.startsWith("*") || l.startsWith("-"))
-    .map((l) => l.replace(/^[-*]\s*/, "").replace(/\s+by\s+@[\w-]+.*$/i, "").trim())
-    .filter((l) => l.length > 0 && !/^full changelog/i.test(l))
-    .slice(0, 6);
-}
-
 export function WhatsNewGate({ children }: { children: ReactNode }) {
   const [reveal, setReveal] = useState<{ version: string; notes: string[] } | null>(null);
+  const [needsNotifPermission, setNeedsNotifPermission] = useState(false);
 
   useEffect(() => {
     if (!isTauri) return;
@@ -31,11 +24,18 @@ export function WhatsNewGate({ children }: { children: ReactNode }) {
         const version = await currentVersion();
         let seen: string | null = null;
         try { seen = localStorage.getItem(SEEN_KEY); } catch { /* ignore */ }
-        if (!seen) { try { localStorage.setItem(SEEN_KEY, version); } catch { /* ignore */ } return; } // first install ever — nothing to celebrate yet
+        // This component only ever renders for an already-onboarded user (a fresh install
+        // goes through Onboarding, a separate path) — so even the very first time this code
+        // runs on a device, it's provably because of an update, never a first install. Always
+        // show when the version doesn't match, including that first time.
         if (seen === version) return;
-        const r = await fetch(`https://api.github.com/repos/${RELEASE_REPO}/releases/tags/v${version}`);
-        if (!r.ok) { try { localStorage.setItem(SEEN_KEY, version); } catch { /* ignore */ } return; }
-        const rel = await r.json();
+        const [relRes, granted] = await Promise.all([
+          fetch(`https://api.github.com/repos/${RELEASE_REPO}/releases/tags/v${version}`),
+          isPermissionGranted().catch(() => true),
+        ]);
+        setNeedsNotifPermission(!granted);
+        if (!relRes.ok) { try { localStorage.setItem(SEEN_KEY, version); } catch { /* ignore */ } return; }
+        const rel = await relRes.json();
         setReveal({ version, notes: extractNotes(rel.body ?? "") });
       } catch { /* non-critical, never block the app over this */ }
     })();
@@ -50,13 +50,20 @@ export function WhatsNewGate({ children }: { children: ReactNode }) {
   return (
     <>
       {children}
-      <AnimatePresence>{reveal && <WhatsNewOverlay version={reveal.version} notes={reveal.notes} onDismiss={dismiss} />}</AnimatePresence>
+      <AnimatePresence>
+        {reveal && <WhatsNewOverlay version={reveal.version} notes={reveal.notes} needsNotifPermission={needsNotifPermission} onDismiss={dismiss} />}
+      </AnimatePresence>
     </>
   );
 }
 
-function WhatsNewOverlay({ version, notes, onDismiss }: { version: string; notes: string[]; onDismiss: () => void }) {
+function WhatsNewOverlay({ version, notes, needsNotifPermission, onDismiss }: {
+  version: string; notes: string[]; needsNotifPermission: boolean; onDismiss: () => void;
+}) {
+  const [asking, setAsking] = useState(false);
+  const [granted, setGranted] = useState(false);
   useEffect(() => { haptic.tap(); }, []);
+
   return (
     <motion.div className="whatsnew-scrim" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.25 }}>
       <motion.div className="whatsnew-card" initial={{ opacity: 0, y: 32, scale: 0.95 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: 16, scale: 0.97 }} transition={spring}>
@@ -79,6 +86,14 @@ function WhatsNewOverlay({ version, notes, onDismiss }: { version: string; notes
               </motion.li>
             ))}
           </motion.ul>
+        )}
+        {needsNotifPermission && !granted && (
+          <motion.div className="row" style={{ gap: 10, width: "100%", marginTop: 10, padding: "10px 12px", background: "var(--surface-mid)", borderRadius: 14, alignItems: "center" }}
+            initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ ...easeOut, delay: 0.4 }}>
+            <Bell size={18} style={{ color: "var(--primary)", flexShrink: 0 }} />
+            <span className="body" style={{ flex: 1, textAlign: "left" }}>Turn on nudges to hear about them</span>
+            <Pill variant="tonal" size="sm" loading={asking} onClick={async () => { setAsking(true); const ok = await ensurePermission(); setAsking(false); setGranted(ok); if (ok) haptic.success(); }}>Enable</Pill>
+          </motion.div>
         )}
         <Pill variant="filled" size="lg" style={{ marginTop: 8, width: "100%" }} onClick={onDismiss}>Let's go</Pill>
       </motion.div>

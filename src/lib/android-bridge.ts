@@ -7,6 +7,8 @@ declare global {
       setLightStatusBar?: (light: boolean) => void;
       haptic?: (type: "tap" | "success" | "warn") => void;
       downloadAndInstall?: (url: string) => void;
+      canInstallPackages?: () => boolean;
+      openInstallPermissionSettings?: () => void;
     };
   }
 }

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { AnimatePresence, motion } from "motion/react";
 import { useProfile, useUpdateProfile } from "../lib/api";
 import { ensurePermission, sendTestNotification } from "../lib/notifications";
@@ -6,6 +6,7 @@ import { isAndroid, isTauri } from "../lib/platform";
 import { DEFAULT_NOTIFICATIONS } from "../lib/config";
 import { Chip, Pill, easeOut, spring } from "../components/ui";
 import { BrandMark } from "../components/BrandMark";
+import "../lib/android-bridge";
 
 const GOALS = ["AI Engineer", "ML Engineer", "Backend Engineer", "Full-stack Engineer", "Data Scientist"];
 const INTERESTS = ["LLMs", "RAG", "Agents", "Fine-tuning", "MLOps", "DSA", "System Design", "Python", "Cloud", "Math for ML", "Frontend", "Career"];
@@ -38,6 +39,11 @@ export function Onboarding() {
   const [interests, setInterests] = useState<string[]>(profile.data?.interests?.length ? profile.data.interests : ["LLMs", "RAG"]);
   const [target, setTarget] = useState(profile.data?.daily_target_minutes ?? 30);
   const [notif, setNotif] = useState<boolean | null>(null);
+  const [canInstall, setCanInstall] = useState(true);
+
+  useEffect(() => {
+    if (isAndroid() && window.AndroidNative?.canInstallPackages) setCanInstall(window.AndroidNative.canInstallPackages());
+  }, []);
 
   const finish = async () => {
     await update.mutateAsync({
@@ -66,6 +72,12 @@ export function Onboarding() {
           </Pill>
         </div>
       ) : <p className="meta">Notifications work in the installed app.</p>}
+      {isAndroid() && !canInstall && (
+        <div className="row" style={{ gap: 10, alignItems: "center", marginTop: 4 }}>
+          <p className="meta grow">Updates install themselves smoother if UpWise can do it directly.</p>
+          <Pill variant="text" size="sm" onClick={() => { window.AndroidNative?.openInstallPermissionSettings?.(); setCanInstall(true); }}>Allow</Pill>
+        </div>
+      )}
     </Step>,
   ];
 

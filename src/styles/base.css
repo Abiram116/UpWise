@@ -2,6 +2,11 @@
 html, body, #root { height: 100%; }
 html { -webkit-text-size-adjust: 100%; -webkit-tap-highlight-color: transparent; }
 
+/* This is a touch-first app — no visible scrollbar track anywhere, on any platform. Scrolling
+   itself is untouched, just the chrome-drawn indicator. */
+* { scrollbar-width: none; -ms-overflow-style: none; }
+*::-webkit-scrollbar { display: none; width: 0; height: 0; }
+
 body {
   margin: 0;
   font-family: var(--font);
