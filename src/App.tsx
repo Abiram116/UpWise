@@ -8,7 +8,7 @@ import { isTauri } from "./lib/platform";
 import { getPref, setPref } from "./lib/store";
 import { flushOutbox } from "./lib/outbox";
 import { connection } from "./lib/connection";
-import { describeError, isNetworkError } from "./lib/errors";
+import { isNetworkError } from "./lib/errors";
 import { pluralize } from "./lib/utils";
 import { useQueryClient } from "@tanstack/react-query";
 import { ErrorState, useToast } from "./components/ui";
@@ -172,18 +172,19 @@ function Background() {
   return null;
 }
 
-/** Last line of defence: a failed promise nobody caught becomes a readable toast instead of
- * silently doing nothing. Connectivity failures are the banner's job, not a toast's. */
+/** Uncaught promise failures only feed the connection store. They must never toast: native
+ * plugins reject quietly in the background all the time, and every user action already
+ * reports its own failure — toasting these showed "That didn't work" after actions that
+ * had actually succeeded. */
 function GlobalErrors() {
-  const toast = useToast();
   useEffect(() => {
     const onRejection = (e: PromiseRejectionEvent) => {
-      if (isNetworkError(e.reason)) { connection.reportError(e.reason); return; }
-      toast(describeError(e.reason).message);
+      if (isNetworkError(e.reason)) connection.reportError(e.reason);
+      else console.warn("unhandled rejection", e.reason);
     };
     window.addEventListener("unhandledrejection", onRejection);
     return () => window.removeEventListener("unhandledrejection", onRejection);
-  }, [toast]);
+  }, []);
   return null;
 }
 

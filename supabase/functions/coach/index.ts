@@ -3,6 +3,7 @@ import { groqJson, MODELS } from "../_shared/groq.ts";
 
 interface CoachOut {
   pick_item_id: string | null;
+  next_item_ids?: string[];
   headline: string;
   message: string;
   reason: string;
@@ -26,6 +27,7 @@ Deno.serve(async (req) => {
     const body = await req.json().catch(() => ({}));
     const availableMinutes: number | null = body.available_minutes ?? null;
     const localHour: number | null = body.local_hour ?? null;
+    const previousPick: string | null = body.previous_pick_id ?? null;
 
     const since = new Date(Date.now() - 28 * 86400e3).toISOString().slice(0, 10);
     const [profile, items, activity, lastSession, recentCompleted] = await Promise.all([
@@ -71,7 +73,8 @@ Deno.serve(async (req) => {
     const interests = profile.data?.interests ?? [];
 
     const system = `You are UpWise, a learning coach and companion for a final-year B.Tech student aiming for: "${profile.data?.goal ?? "AI Engineer"}"${interests.length ? ` (interested in: ${interests.join(", ")})` : ""}.
-You know their history — use it, don't sound like a generic template. Pick ONE item from their backlog to do right now and write a short nudge that reads like you actually remember them.
+You know their history — use it, don't sound like a generic template. Plan their next stretch from the backlog: ONE item to do right now, plus up to 2 that should follow it, and write a short nudge that reads like you actually remember them.
+The nudge is about the plan, not one video: say why the pick comes first and how the follow-ups connect (same topic, a quick win after a long one, a neglected area). Vary your picks — if PREVIOUS_PICK is still in the backlog, choose something else unless it's clearly the only sensible option.
 
 Adapt your tone to their situation, using the ACTIVITY info below:
 - Returning after 4+ days quiet: warm re-entry, zero guilt, suggest something short/easy to rebuild momentum. Don't dwell on the gap.
@@ -82,7 +85,7 @@ Adapt your tone to their situation, using the ACTIVITY info below:
 If nothing in the backlog fits the available time well, still pick the shortest reasonable item as a genuine "quick win" rather than suggesting nothing or something too long — a few real minutes beats a skipped day. SHORTEST_AVAILABLE_MIN tells you the floor.
 
 Return STRICT JSON:
-{"pick_item_id": "uuid or null", "headline": "<=40 chars, no emoji", "message": "<=90 chars, one punchy sentence, specific, mentions the item and why now, in your adapted tone — cut every word that isn't pulling weight", "reason": "<=120 chars internal reasoning", "focus_category": "category name or null", "weak_spot": "one category they've been neglecting, or null"}
+{"pick_item_id": "uuid or null", "next_item_ids": ["up to 2 uuids, in order, never the pick"], "headline": "<=40 chars, no emoji", "message": "<=160 chars, 1-2 sentences, specific: why the pick now and what comes after it, in your adapted tone — cut every word that isn't pulling weight", "reason": "<=120 chars internal reasoning", "focus_category": "category name or null", "weak_spot": "one category they've been neglecting, or null"}
 If backlog is empty, headline/message should encourage saving something useful instead.`;
 
     const userMsg = [
@@ -93,12 +96,15 @@ If backlog is empty, headline/message should encourage saving something useful i
       recentTopics.length ? `RECENTLY LEARNED: ${recentTopics.join("; ")}.` : "",
       `Last 28 days: ${minutes28} min learned across ${activeDays} active days, ${completed28} completed, ${added28} saved.`,
       shortestMinutes != null ? `SHORTEST_AVAILABLE_MIN: ${shortestMinutes}` : "",
+      previousPick ? `PREVIOUS_PICK: ${previousPick}` : "",
       `BACKLOG (id | status | category | relevance | est | age | title):\n${list.join("\n") || "(empty)"}`,
     ].filter(Boolean).join("\n\n");
 
     const out = await groqJson<CoachOut>({ model: MODELS.coach(), system, user: userMsg, maxTokens: 400 });
     const validIds = new Set((items.data ?? []).map((i) => i.id));
     if (out.pick_item_id && !validIds.has(out.pick_item_id)) out.pick_item_id = null;
+    out.next_item_ids = (Array.isArray(out.next_item_ids) ? out.next_item_ids : [])
+      .filter((id) => validIds.has(id) && id !== out.pick_item_id).slice(0, 2);
     return json({ ...out, stats: { minutes28, completed28, added28, activeDays, daysSinceActive } });
   } catch (e) {
     if (e instanceof AuthError) return json({ error: e.message }, 401);

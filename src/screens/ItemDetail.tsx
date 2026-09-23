@@ -1,7 +1,7 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useLocation, useNavigate, useParams } from "react-router";
 import { motion } from "motion/react";
-import { ArrowLeft, ArrowRight, Check, ChevronDown, ExternalLink, ListPlus, Play, RefreshCw, SkipForward, Trash2, Clock } from "lucide-react";
+import { ArrowLeft, ArrowRight, Check, ChevronRight, Copy, ExternalLink, FileText, ListPlus, Play, RefreshCw, SkipForward, Trash2, Clock } from "lucide-react";
 import { logManualMinutes, useAnalyze, useCategories, useDeleteItemWithUndo, useItem, useItemTranscript, useSetStatus, useUpdateItem } from "../lib/api";
 import { isDesktop } from "../lib/platform";
 import { openExternal as open } from "../lib/links";
@@ -199,22 +199,15 @@ export function ItemDetailScreen() {
 
       {item.has_transcript && (
         <Rise>
-          <button className="row title-sm" style={{ gap: 8, minHeight: 44 }} onClick={() => setShowTranscript((v) => !v)}>
-            <ChevronDown size={18} style={{ transform: showTranscript ? "rotate(180deg)" : undefined, transition: "transform .25s var(--spring)" }} /> {item.source === "article" ? "Full text" : "Transcript"}
+          <button className="setting" style={{ marginLeft: -4 }} onClick={() => setShowTranscript(true)}>
+            <span className="setting-icon"><FileText size={18} /></span>
+            <div className="grow"><div className="title-sm">{item.source === "article" ? "Full text" : "Transcript"}</div><div className="meta">Read, search or copy it</div></div>
+            <ChevronRight size={18} className="meta" />
           </button>
-          {showTranscript && (
-            <motion.div className="slab" initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }} transition={spring} style={{ overflow: "hidden", marginTop: 8 }}>
-              {transcript.data ? (
-                <p className="body selectable" style={{ lineHeight: 1.7, maxHeight: 360, overflow: "auto" }}>{transcript.data}</p>
-              ) : transcript.isError ? (
-                <p className="body">{isNetworkError(transcript.error) ? "The transcript isn't saved on this device — it'll load when you're back online." : describeError(transcript.error).message}</p>
-              ) : transcript.isSuccess ? (
-                <p className="body">No transcript text was stored for this one.</p>
-              ) : <Spinner />}
-            </motion.div>
-          )}
         </Rise>
       )}
+
+      <TranscriptSheet open={showTranscript} onClose={() => setShowTranscript(false)} title={item.source === "article" ? "Full text" : "Transcript"} query={transcript} />
 
       <Rise>
         <div className="row between" style={{ paddingTop: 8 }}>
@@ -301,6 +294,59 @@ function FinishPromptSheet({ open, onClose, hasTakeaway, onDone }: {
         {hasTakeaway ? "Even just reading the takeaway counts — pick roughly how long." : "Pick roughly how long you actually spent, so your stats stay honest."}
       </p>
       <div className="chips">{[1, 3, 5, 10, 15, 20, 30, 45, 60].map((m) => <Chip key={m} onClick={() => busy === null && pick(m)}>{m} min</Chip>)}</div>
+    </Sheet>
+  );
+}
+
+/** Captions often arrive as one unpunctuated wall of text — break it into readable paragraphs:
+ * by sentences when there's punctuation, by word count when there isn't. */
+function paragraphs(text: string): string[] {
+  const sentences = text.replace(/\s+/g, " ").trim().match(/[^.!?]+[.!?]+["')\]]*\s*|[^.!?]+$/g) ?? [];
+  const out: string[] = [];
+  if (sentences.length > 3) {
+    for (let i = 0; i < sentences.length; i += 4) out.push(sentences.slice(i, i + 4).join("").trim());
+  } else {
+    const words = text.split(/\s+/);
+    for (let i = 0; i < words.length; i += 70) out.push(words.slice(i, i + 70).join(" "));
+  }
+  return out.filter(Boolean);
+}
+
+function Highlight({ text, term }: { text: string; term: string }) {
+  if (!term) return <>{text}</>;
+  const parts = text.split(new RegExp(`(${term.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")})`, "gi"));
+  return <>{parts.map((p, i) => (i % 2 ? <mark key={i} className="find-hit">{p}</mark> : p))}</>;
+}
+
+function TranscriptSheet({ open, onClose, title, query }: {
+  open: boolean; onClose: () => void; title: string; query: ReturnType<typeof useItemTranscript>;
+}) {
+  const toast = useToast();
+  const [find, setFind] = useState("");
+  const paras = useMemo(() => (query.data ? paragraphs(query.data) : []), [query.data]);
+  const term = find.trim().toLowerCase();
+  const shown = term.length >= 2 ? paras.filter((p) => p.toLowerCase().includes(term)) : paras;
+  return (
+    <Sheet open={open} onClose={onClose} title={title}>
+      {query.data ? (
+        <div className="col" style={{ gap: 14 }}>
+          <div className="row" style={{ gap: 8 }}>
+            <input className="input grow" placeholder="Find in transcript" value={find} onChange={(e) => setFind(e.target.value)} enterKeyHint="search" />
+            <Pill variant="tonal" icon aria-label="Copy transcript" onClick={async () => {
+              try { await navigator.clipboard.writeText(query.data!); toast("Copied"); }
+              catch { toast("Couldn't copy automatically — long-press the text to select it"); }
+            }}><Copy size={17} /></Pill>
+          </div>
+          {term.length >= 2 && <p className="meta">{shown.length ? `${shown.length} matching ${shown.length === 1 ? "part" : "parts"}` : "Not mentioned in this one"}</p>}
+          <div className="col selectable" style={{ gap: 14 }}>
+            {shown.map((p, i) => <p key={i} className="prose"><Highlight text={p} term={term.length >= 2 ? find.trim() : ""} /></p>)}
+          </div>
+        </div>
+      ) : query.isError ? (
+        <p className="body">{isNetworkError(query.error) ? "The transcript isn't saved on this device — it'll load when you're back online." : describeError(query.error).message}</p>
+      ) : query.isSuccess ? (
+        <p className="body">No transcript text was stored for this one.</p>
+      ) : <div style={{ display: "grid", placeItems: "center", padding: 24 }}><Spinner /></div>}
     </Sheet>
   );
 }

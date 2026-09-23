@@ -105,6 +105,9 @@ class MainActivity : TauriActivity() {
   override fun onWebViewCreate(webView: WebView) {
     super.onWebViewCreate(webView)
     this.webView = webView
+    // The WebView draws its own native scrollbar over the page; CSS can't reach it.
+    webView.isVerticalScrollBarEnabled = false
+    webView.isHorizontalScrollBarEnabled = false
     webView.addJavascriptInterface(NativeBridge(), "AndroidNative")
     pendingShare?.let { deliver(it) }
   }

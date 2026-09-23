@@ -96,6 +96,7 @@ export interface DailyActivity {
 
 export interface CoachResult {
   pick_item_id: string | null;
+  next_item_ids?: string[];
   headline: string;
   message: string;
   reason: string;

@@ -21,10 +21,12 @@ export function useCoach(enabled: boolean, validIds?: Set<string>) {
   // completed, or skipped, the cache never notices and just silently falls back to a generic
   // "Up next" for however long is left on the TTL (caught live: up to 6 hours).
   const pickGone = !!cached?.pick_item_id && !!validIds && !validIds.has(cached.pick_item_id);
-  const stale = !cached || pickGone || Date.now() - (cached.fetched_at ?? 0) > COACH_TTL_MS;
+  // Results cached before the coach planned follow-ups have no next_item_ids — refresh those.
+  const stale = !cached || pickGone || !("next_item_ids" in cached) || Date.now() - (cached.fetched_at ?? 0) > COACH_TTL_MS;
   const q = useQuery({
     queryKey: ["coach"],
-    queryFn: async () => { const c = await fetchCoach(); await setPref("coach", c); return c; },
+    // Passing the last pick lets the coach rotate instead of repeating the same item for days.
+    queryFn: async () => { const c = await fetchCoach(undefined, cached?.pick_item_id); await setPref("coach", c); return c; },
     enabled: enabled && cached !== undefined && stale,
     staleTime: COACH_TTL_MS,
     retry: 1,
@@ -54,6 +56,10 @@ export function HomeScreen() {
     return fromCoach ?? heuristicPick(items.data ?? []);
   }, [coach, pending, items.data]);
   const coached = !!(coach && pick && coach.pick_item_id === pick.id);
+  const nextUp = useMemo(
+    () => (coached ? (coach!.next_item_ids ?? []).map((id) => pending.find((i) => i.id === id)).filter((i): i is Item => !!i) : []),
+    [coached, coach, pending],
+  );
 
   const onBreak = isOnBreak(profile.data?.settings);
   const st = activity.data ? streak(activity.data, breakDaySet(profile.data?.settings)) : null;
@@ -92,6 +98,17 @@ export function HomeScreen() {
                 <p className="body-lg" style={{ marginTop: 14 }}>{coached ? coach!.message : pick.ai?.why_it_matters}</p>
               )}
             </button>
+            {nextUp.length > 0 && (
+              <div className="col" style={{ gap: 2, marginTop: 14 }}>
+                <p className="section-title">Then</p>
+                {nextUp.map((i) => (
+                  <button key={i.id} className="row body" style={{ gap: 8, minHeight: 40, textAlign: "left" }} onClick={() => nav(`/item/${i.id}`)}>
+                    <span className="truncate grow">{i.title}</span>
+                    {i.estimated_minutes != null && <span className="meta num">~{fmtMinutes(i.estimated_minutes)}</span>}
+                  </button>
+                ))}
+              </div>
+            )}
             <div className="row" style={{ gap: 8, marginTop: 22 }}>
               <Pill variant="filled" size="lg" onClick={async () => { await startSession(pick); nav(`/item/${pick.id}`); }}>
                 <Play size={18} fill="currentColor" /> Start
