@@ -96,7 +96,7 @@ export function Segmented<T extends string>({ value, onChange, options }: { valu
 }
 
 // ---------- Sheet (bottom on touch, dialog on desktop) ----------
-export function Sheet({ open, onClose, children, title }: { open: boolean; onClose: () => void; children: ReactNode; title?: string }) {
+export function Sheet({ open, onClose, children, title, className }: { open: boolean; onClose: () => void; children: ReactNode; title?: string; className?: string }) {
   const reduce = useReducedMotion();
   const isDesk = typeof window !== "undefined" && window.matchMedia("(min-width: 840px)").matches;
   useBackHandler(open, onClose);
@@ -112,7 +112,7 @@ export function Sheet({ open, onClose, children, title }: { open: boolean; onClo
         <>
           <motion.div className="scrim" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.2 }} onClick={onClose} />
           <motion.div
-            className="sheet" role="dialog" aria-modal
+            className={cx("sheet", className)} role="dialog" aria-modal
             initial={reduce ? { opacity: 0 } : isDesk ? { opacity: 0, scale: 0.96, x: "-50%", y: "-47%" } : { y: "100%" }}
             animate={reduce ? { opacity: 1 } : isDesk ? { opacity: 1, scale: 1, x: "-50%", y: "-50%" } : { y: 0 }}
             exit={reduce ? { opacity: 0 } : isDesk ? { opacity: 0, scale: 0.98, x: "-50%", y: "-47%" } : { y: "100%" }}

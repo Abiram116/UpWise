@@ -173,12 +173,16 @@ select.input { padding-right: 36px; appearance: none; -webkit-appearance: none; 
   position: fixed; left: 0; right: 0; bottom: 0; z-index: 51;
   background: var(--surface-low); border-radius: var(--r-sheet) var(--r-sheet) 0 0;
   padding: 12px var(--gutter) calc(var(--s-6) + var(--safe-bottom));
-  max-height: 92dvh; overflow-y: auto;
+  max-height: 92dvh; overflow-y: auto; overflow-x: hidden;
 }
+.sheet .col > * { min-width: 0; }
 .sheet-grip { width: 32px; height: 4px; border-radius: 999px; background: var(--on-surface-3); opacity: 0.5; margin: 0 auto 18px; }
 @media (min-width: 840px) {
   .sheet { left: 50%; top: 50%; bottom: auto; right: auto; width: min(520px, calc(100vw - 48px)); transform: translate(-50%, -50%); border-radius: var(--r-slab); padding: var(--s-6) var(--s-7); max-height: 86vh; background: var(--surface-mid); }
   .sheet-grip { display: none; }
+  /* Long reading (transcripts) on desktop: wider column and a real scrollbar — with a mouse,
+     a visible thumb is how you see where you are in 60KB of text. */
+  .sheet.sheet-reader { width: min(760px, calc(100vw - 48px)); scrollbar-width: thin; scrollbar-color: color-mix(in srgb, var(--on-surface-3) 60%, transparent) transparent; }
 }
 
 /* ---------- feedback ---------- */
@@ -240,7 +244,9 @@ select.input { padding-right: 36px; appearance: none; -webkit-appearance: none; 
 .bars .col-bar { width: 100%; border-radius: 8px 8px 4px 4px; background: var(--surface-high); min-height: 4px; }
 .bars .col-bar[data-now="true"] { background: var(--primary); }
 
-.prose { color: var(--on-surface-2); line-height: 1.6; }
+/* overflow-wrap: one long unbroken token (a URL in a transcript) must wrap, not widen the
+   whole column — that pushed every paragraph in the transcript sheet off-screen. */
+.prose { color: var(--on-surface-2); line-height: 1.6; overflow-wrap: anywhere; }
 .prose ul { margin: 0; padding-left: 18px; }
 .prose li + li { margin-top: 4px; }
 .kbd { font-size: 12px; padding: 2px 7px; border-radius: 6px; background: var(--surface-mid); color: var(--on-surface-3); }

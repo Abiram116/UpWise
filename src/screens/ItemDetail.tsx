@@ -327,7 +327,7 @@ function TranscriptSheet({ open, onClose, title, query }: {
   const term = find.trim().toLowerCase();
   const shown = term.length >= 2 ? paras.filter((p) => p.toLowerCase().includes(term)) : paras;
   return (
-    <Sheet open={open} onClose={onClose} title={title}>
+    <Sheet open={open} onClose={onClose} title={title} className="sheet-reader">
       {query.data ? (
         <div className="col" style={{ gap: 14 }}>
           <div className="row" style={{ gap: 8 }}>
