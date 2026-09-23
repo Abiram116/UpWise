@@ -13,10 +13,14 @@ import { ItemRow } from "../components/ItemCard";
 import { useSessionStore } from "../components/SessionBar";
 import { Dots, Empty, ErrorState, Page, Pill, Rise, Skeleton, easeOut, spring, stagger, useToast } from "../components/ui";
 
-export function useCoach(enabled: boolean) {
+export function useCoach(enabled: boolean, validIds?: Set<string>) {
   const [cached, setCached] = useState<CoachResult | null | undefined>(undefined);
   useEffect(() => { getPref<CoachResult | null>("coach", null).then(setCached); }, []);
-  const stale = !cached || Date.now() - (cached.fetched_at ?? 0) > COACH_TTL_MS;
+  // Cached purely by time otherwise — if the item the coach was talking about gets deleted,
+  // completed, or skipped, the cache never notices and just silently falls back to a generic
+  // "Up next" for however long is left on the TTL (caught live: up to 6 hours).
+  const pickGone = !!cached?.pick_item_id && !!validIds && !validIds.has(cached.pick_item_id);
+  const stale = !cached || pickGone || Date.now() - (cached.fetched_at ?? 0) > COACH_TTL_MS;
   const q = useQuery({
     queryKey: ["coach"],
     queryFn: async () => { const c = await fetchCoach(); await setPref("coach", c); return c; },
@@ -36,7 +40,8 @@ export function HomeScreen() {
   const startSession = useSessionStore((s) => s.start);
 
   const pending = useMemo(() => (items.data ?? []).filter((i) => i.status === "inbox" || i.status === "queued" || i.status === "in_progress"), [items.data]);
-  const { coach, refresh, loading: coachLoading } = useCoach(pending.length > 0);
+  const pendingIds = useMemo(() => new Set(pending.map((i) => i.id)), [pending]);
+  const { coach, refresh, loading: coachLoading } = useCoach(pending.length > 0, pendingIds);
   const pick: Item | null = useMemo(() => {
     const fromCoach = coach?.pick_item_id ? pending.find((i) => i.id === coach.pick_item_id) : null;
     return fromCoach ?? heuristicPick(items.data ?? []);

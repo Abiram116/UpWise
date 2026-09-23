@@ -55,6 +55,12 @@ Living backlog of things to build next. Nothing here is built yet — this is th
 
 - [x] **Context-aware home message.** Done: coach now knows days since your last session/completion and what you recently finished, with explicit tone branches (warm re-entry after 4+ quiet days, lean in on a streak, simple first-message welcome, mention a growing backlog only when it's a real problem). Verified via test-coach.mjs against the real account. Still open: quiet mode during a declared break, which depends on streak-freeze below.
 - [x] **Streak freeze / take a break mode.** Done: Settings → "Take a break" (Tomorrow/3 days/1 week/Until I resume presets, optional reason), stored in `profile.settings.break_*` (no schema migration, it's the existing jsonb column). `streak()` now takes a break-day set and treats those days as neutral — doesn't count toward the streak but doesn't reset it either, for both current and best-streak math. `replanNotifications` silences all nudges while on break. Home shows "On a break" + return date instead of the daily progress bar.
+- [x] **Home coach message silently going stale.** Caught live — deleted the item the coach's Home message was about, and it fell back to a generic "Up next" and stayed that way even after reopening the app. Root cause: the coach result is cached for up to 6 hours (to avoid refetching every open) but nothing ever checked whether the item it was talking about still existed. `useCoach` now also treats the cache as stale if its `pick_item_id` isn't in the current pending set, forcing a fresh coach call immediately instead of waiting out the TTL.
+- [x] **Search across everything you've actually saved.** Search already covered title/tags/summary — extended to also match AI key concepts and the full transcript/article text, so "what did I save about RAG" finds things even when the summary phrased it differently. Placeholder text updated to hint at this. (Note: this is search, not persistent item-to-item "builds on" links — that idea is still on the list below, unbuilt.)
+- [x] **Offline-safe save queue.** Sharing or pasting a link with no connection now queues it locally (device-local store, not lost) instead of just failing — a distinct "No connection" screen in the add sheet instead of a raw error. Retries automatically on the `online` browser event and once on every app start; on success, invalidates the items/categories cache and toasts a summary.
+- [x] **Merge duplicate categories.** Settings → Library → "Merge categories" — moves every item from one category into another and deletes the empty one. Verified live against the test account (items correctly reassigned, source category actually gone).
+- [x] **Flag dead links.** Piggybacks on the re-analyze feature: if a re-analyze comes back with zero usable data (no title, thumbnail, content, or transcript) for a link that previously had real data, that's treated as a strong "this has been removed" signal — sets a clear message instead of running a pointless AI call on nothing, and importantly does NOT overwrite the item's existing good title/thumbnail with empty fallback values. Verified live against a genuinely nonexistent domain.
+- [x] **Auto-lock.** Re-asks the PIN if the app version changed since last use, or if it's been 6+ days — tracked via a lightweight local timestamp+version pair, checked on startup. Re-entering the PIN still does a real `signInWithPassword` call (never a local-only check), consistent with the PIN gate's actual security model.
 
 ## 6. Notifications
 
@@ -71,14 +77,9 @@ Living backlog of things to build next. Nothing here is built yet — this is th
 
 ## 8. Ideated, not yet built (from a brainstorm session)
 
-- **Search across what you've actually learned** — summaries/transcripts, not just titles/tags. Turns the library into a real knowledge base.
-- **Offline-safe save queue** — sharing a link with no signal should queue and analyze once back online instead of failing.
-- **"Builds on" links between items** — connect related items beyond just duplicate/overlap flags.
+- **"Builds on" links between items** — connect related items beyond just duplicate/overlap flags (search across items is done; this is a separate persistent relationship between two library items).
 - **Resume from timestamp** — items already get AI-detected segments with timestamps; let an in-progress item jump back to where you stopped.
-- **Merge duplicate categories** — a Settings action for when the AI creates near-identical categories over time.
 - **Catch near-duplicate saves** — fuzzy match (title/channel/duration or normalized URL) beyond exact-URL dedup, ideally surfaced at save-time.
-- **Flag dead links** — detect a deleted video / 404'd article instead of leaving a stale entry forever.
-- **Auto-lock** — re-ask the PIN after a version update, or after 6+ days away.
 - **Logo redesign** — current arrow mark's purple doesn't appear anywhere else in the app's actual sage/apricot palette. Explicitly deferred to last — do NOT start until asked.
 
 ## 9. Docs

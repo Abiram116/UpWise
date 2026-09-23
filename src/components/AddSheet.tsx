@@ -1,9 +1,10 @@
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { useNavigate } from "react-router";
 import { AnimatePresence, motion } from "motion/react";
-import { AlertCircle, ArrowRight, Play } from "lucide-react";
+import { AlertCircle, ArrowRight, Play, WifiOff } from "lucide-react";
 import { useAnalyze, useCategories, useUpdateItem, type AnalyzeStage } from "../lib/api";
 import { extractUrl, fmtMinutes, detectSource, SOURCE_LABEL } from "../lib/utils";
+import { looksOffline, queueOfflineSave } from "../lib/offlineQueue";
 import type { Item } from "../lib/types";
 import { Chip, CheckIcon, Dots, Pill, Sheet, easeOut, spring, useToast } from "./ui";
 import { useSessionStore } from "./SessionBar";
@@ -33,6 +34,7 @@ export function AddSheet({ open, onClose }: { open: boolean; onClose: () => void
   const [stage, setStage] = useState<AnalyzeStage | null>(null);
   const [result, setResult] = useState<{ item: Item; duplicate: boolean; ai_error: string | null } | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [queuedOffline, setQueuedOffline] = useState(false);
   const analyze = useAnalyze();
   const inputRef = useRef<HTMLInputElement>(null);
   const toast = useToast();
@@ -47,7 +49,7 @@ export function AddSheet({ open, onClose }: { open: boolean; onClose: () => void
 
   const run = async (u: string, via: "paste" | "share" = "paste") => {
     const runId = ++activeRunId.current;
-    setError(null); setResult(null); setStage("metadata");
+    setError(null); setResult(null); setQueuedOffline(false); setStage("metadata");
     try {
       const r = await analyze.mutateAsync([u, {
         note: note.trim() || undefined, addedVia: via,
@@ -60,7 +62,11 @@ export function AddSheet({ open, onClose }: { open: boolean; onClose: () => void
       }
     } catch (e) {
       const message = (e as Error).message || "Something went wrong";
-      if (dismissedRuns.current.has(runId)) toast(`Couldn't save that link: ${message}`);
+      if (looksOffline(message)) {
+        await queueOfflineSave({ url: u, note: note.trim() || undefined, via });
+        if (dismissedRuns.current.has(runId)) toast("No connection — saved to sync automatically");
+        else setQueuedOffline(true);
+      } else if (dismissedRuns.current.has(runId)) toast(`Couldn't save that link: ${message}`);
       else setError(message);
     } finally {
       dismissedRuns.current.delete(runId);
@@ -82,7 +88,7 @@ export function AddSheet({ open, onClose }: { open: boolean; onClose: () => void
   const busy = stage !== null;
   const source = url ? detectSource(url) : null;
 
-  const reset = () => { setUrl(""); setNote(""); setResult(null); setError(null); setStage(null); };
+  const reset = () => { setUrl(""); setNote(""); setResult(null); setError(null); setQueuedOffline(false); setStage(null); };
   const close = () => {
     if (busy) dismissedRuns.current.add(activeRunId.current);
     onClose();
@@ -90,9 +96,20 @@ export function AddSheet({ open, onClose }: { open: boolean; onClose: () => void
   };
 
   return (
-    <Sheet open={open} onClose={close} title={result ? undefined : busy ? "Reading it" : "Add a link"}>
+    <Sheet open={open} onClose={close} title={result || queuedOffline ? undefined : busy ? "Reading it" : "Add a link"}>
       <AnimatePresence mode="wait" initial={false}>
-        {!busy && !result && (
+        {queuedOffline && (
+          <motion.div key="queued" className="col" style={{ gap: 14, alignItems: "center", textAlign: "center", padding: "8px 0" }}
+            initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} transition={spring}>
+            <div className="thumb" data-tone="sage" style={{ width: 56, aspectRatio: "1", borderRadius: 999 }}><WifiOff size={24} /></div>
+            <div>
+              <h3 className="headline-sm">No connection</h3>
+              <p className="body" style={{ marginTop: 6 }}>Saved for later — it'll analyze itself the moment you're back online.</p>
+            </div>
+            <Pill variant="filled" size="lg" style={{ width: "100%" }} onClick={close}>Got it</Pill>
+          </motion.div>
+        )}
+        {!busy && !result && !queuedOffline && (
           <motion.form key="form" className="col" style={{ gap: 12 }} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.15 }}
             onSubmit={(e) => { e.preventDefault(); const u = extractUrl(url); if (u) void run(u); }}>
             <input ref={inputRef} className="input input-lg" placeholder="YouTube, Instagram or article link" value={url}

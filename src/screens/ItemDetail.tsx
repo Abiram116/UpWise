@@ -179,13 +179,13 @@ export function ItemDetailScreen() {
 
       <Rise>
         <div className="row between" style={{ paddingTop: 8 }}>
-          <span className="meta">{ai.model ? `Analyzed by ${ai.model}` : ai.error ? `AI error: ${ai.error}` : ""}</span>
+          <span className="meta">{ai.model ? `Analyzed by ${ai.model}` : ai.error ? (/removed|no longer accessible/i.test(ai.error) ? ai.error : `AI error: ${ai.error}`) : ""}</span>
           <div className="row" style={{ gap: 4 }}>
             <Pill variant="text" size="sm" loading={reanalyzing} onClick={async () => {
               setReanalyzing(true);
               try {
-                await analyze.mutateAsync([item.url, { note: item.notes ?? undefined, reanalyzeId: item.id }]);
-                toast("Re-analyzed");
+                const r = await analyze.mutateAsync([item.url, { note: item.notes ?? undefined, reanalyzeId: item.id }]);
+                toast(r.ai_error ?? "Re-analyzed");
               } catch (e) { toast((e as Error).message); }
               finally { setReanalyzing(false); }
             }}><RefreshCw size={16} /> Re-analyze</Pill>

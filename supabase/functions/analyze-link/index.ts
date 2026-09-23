@@ -101,7 +101,7 @@ Deno.serve(async (req) => {
     const parsed = parseLink(rawUrl);
     const reanalyzeId: string | undefined = typeof body.reanalyze_id === "string" ? body.reanalyze_id : undefined;
 
-    const { data: existing } = await supabase.from("items").select("id, title, status")
+    const { data: existing } = await supabase.from("items").select("id, title, status, ai")
       .eq("canonical_url", parsed.canonicalUrl).maybeSingle();
     if (existing && existing.id !== reanalyzeId) return json({ duplicate: true, item: existing });
 
@@ -129,14 +129,23 @@ Deno.serve(async (req) => {
     }
     else meta = await fetchArticle(parsed.canonicalUrl);
 
+    // A re-analyze that comes back with absolutely nothing (no title, no thumbnail, no
+    // content) for a link that previously had real data is the strongest signal available
+    // that it's been deleted/removed — skip the pointless Groq call and say so plainly.
+    const seemsDead = !!reanalyzeId && !meta.title && !meta.thumbnailUrl && !meta.transcript && !meta.content;
+
     let ai: Partial<Analysis> & { model?: string; error?: string } = {};
-    try {
-      const { system, user: userMsg } = buildPrompt(meta, note, goal, interests, categories, recentTitles);
-      const model = MODELS.analyze();
-      ai = await groqJson<Analysis>({ model, system, user: userMsg });
-      ai.model = model;
-    } catch (e) {
-      ai = { error: (e as Error).message };
+    if (seemsDead) {
+      ai = { error: "This link looks like it's been removed or is no longer accessible." };
+    } else {
+      try {
+        const { system, user: userMsg } = buildPrompt(meta, note, goal, interests, categories, recentTitles);
+        const model = MODELS.analyze();
+        ai = await groqJson<Analysis>({ model, system, user: userMsg });
+        ai.model = model;
+      } catch (e) {
+        ai = { error: (e as Error).message };
+      }
     }
 
     let categoryId: string | null = null;
@@ -192,9 +201,13 @@ Deno.serve(async (req) => {
 
     // Re-analyzing an existing item refreshes its content without resetting its status/progress
     // (an already-completed item shouldn't jump back to "inbox" just because you asked for a
-    // fresh take on it) or its saved note.
+    // fresh take on it) or its saved note. A link that seems dead is the one exception — don't
+    // blow away the item's good historical title/thumbnail with empty fallback values, just
+    // record that it couldn't be read this time.
     const { error: insertErr, data: item } = reanalyzeId
-      ? await supabase.from("items").update(refreshed).eq("id", reanalyzeId)
+      ? await supabase.from("items")
+        .update(seemsDead ? { ai: { ...(existing?.ai ?? {}), error: ai.error } } : refreshed)
+        .eq("id", reanalyzeId)
         .select("*, category:categories(id, name, slug, color)").single()
       : await supabase.from("items").insert({
         user_id: user.id, url: rawUrl.trim(), status: "inbox", notes: note ?? null, added_via: addedVia, ...refreshed,

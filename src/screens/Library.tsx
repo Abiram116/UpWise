@@ -42,7 +42,13 @@ export function LibraryScreen() {
     if (cat) l = l.filter((i) => i.category?.id === cat);
     if (q.trim()) {
       const s = q.toLowerCase();
-      l = l.filter((i) => (i.title ?? "").toLowerCase().includes(s) || i.tags.some((t) => t.includes(s)) || (i.ai?.summary ?? "").toLowerCase().includes(s));
+      l = l.filter((i) =>
+        (i.title ?? "").toLowerCase().includes(s) ||
+        i.tags.some((t) => t.includes(s)) ||
+        (i.ai?.summary ?? "").toLowerCase().includes(s) ||
+        (i.ai?.key_concepts ?? []).some((c) => c.toLowerCase().includes(s)) ||
+        (i.transcript ?? "").toLowerCase().includes(s),
+      );
     }
     if (filter === "todo") {
       const rank: Record<string, number> = { in_progress: 0, queued: 1, inbox: 2 };
@@ -88,7 +94,7 @@ export function LibraryScreen() {
         <div className="col" style={{ gap: 12 }}>
           <div className="searchbar">
             <Search size={18} strokeWidth={2} />
-            <input className="input" placeholder="Search" value={q} onChange={(e) => setQ(e.target.value)} enterKeyHint="search" />
+            <input className="input" placeholder="Search titles, concepts, even transcripts" value={q} onChange={(e) => setQ(e.target.value)} enterKeyHint="search" />
           </div>
           <Segmented value={filter} onChange={(v) => set("f", v)} options={[{ value: "todo", label: "To learn" }, { value: "done", label: "Done" }, { value: "all", label: "All" }]} />
           {!!cats.data?.length && (

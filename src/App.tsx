@@ -7,6 +7,9 @@ import { replanNotifications, snoozeNotification } from "./lib/notifications";
 import { installShareBridge } from "./lib/share";
 import { isTauri } from "./lib/platform";
 import { getPref, setPref } from "./lib/store";
+import { processOfflineQueue } from "./lib/offlineQueue";
+import { useQueryClient } from "@tanstack/react-query";
+import { useToast } from "./components/ui";
 import { AppShell } from "./components/AppShell";
 import { WindowControls } from "./components/WindowControls";
 import { Spinner } from "./components/ui";
@@ -92,6 +95,25 @@ function Background() {
   const { coach } = useCoach(false);
   const setStatus = useSetStatus();
   const nav = useNavigate();
+  const qc = useQueryClient();
+  const toast = useToast();
+
+  // A link shared with no signal gets queued instead of just failing (AddSheet handles the
+  // queueing itself) — this is the other half: actually retry the queue once connectivity's
+  // back, on startup and whenever the device comes back online.
+  useEffect(() => {
+    const flush = async () => {
+      const { ok } = await processOfflineQueue();
+      if (ok > 0) {
+        qc.invalidateQueries({ queryKey: ["items"] });
+        qc.invalidateQueries({ queryKey: ["categories"] });
+        toast(`Synced ${ok} saved link${ok === 1 ? "" : "s"}`);
+      }
+    };
+    void flush();
+    window.addEventListener("online", flush);
+    return () => window.removeEventListener("online", flush);
+  }, [qc, toast]);
   // Persisted (survives cold starts, unlike a ref) so reopening the app the same day never
   // re-plans. Settings changes replan directly via their own save handler, independent of this.
   const plannedRef = useRef<string>("");

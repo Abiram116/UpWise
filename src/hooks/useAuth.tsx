@@ -2,6 +2,7 @@ import { createContext, useCallback, useContext, useEffect, useState, type React
 import type { Session } from "@supabase/supabase-js";
 import { supabase } from "../lib/supabase";
 import { derivePassword } from "../lib/pin";
+import { currentVersion } from "../lib/updater";
 
 // Single-user app, no visible login UI — but unlike a baked-in password, this never ships
 // a real credential in the bundle. First launch (or after signing out) asks for a PIN once;
@@ -9,6 +10,29 @@ import { derivePassword } from "../lib/pin";
 // Every launch after that just resumes the persisted Supabase session, same as before.
 const EMAIL = import.meta.env.VITE_APP_EMAIL as string | undefined;
 const NAME = (import.meta.env.VITE_APP_NAME as string | undefined) ?? "there";
+
+// Re-lock even with a valid session if it's been a real update or a long time away — the
+// PIN is cheap to re-enter and it's not much of a "lock" if it only ever asks once, ever.
+const LAST_ACTIVE_KEY = "upwise:lastActiveAt";
+const LAST_VERSION_KEY = "upwise:lastActiveVersion";
+const RELOCK_AFTER_MS = 6 * 24 * 60 * 60 * 1000;
+
+function markActive(version: string) {
+  try {
+    localStorage.setItem(LAST_ACTIVE_KEY, String(Date.now()));
+    localStorage.setItem(LAST_VERSION_KEY, version);
+  } catch { /* ignore */ }
+}
+
+function shouldRelock(version: string): boolean {
+  try {
+    const lastAt = Number(localStorage.getItem(LAST_ACTIVE_KEY) ?? "0");
+    if (!lastAt) return false; // never recorded — first run, nothing to compare against
+    const lastVersion = localStorage.getItem(LAST_VERSION_KEY);
+    if (lastVersion && lastVersion !== version) return true;
+    return Date.now() - lastAt > RELOCK_AFTER_MS;
+  } catch { return false; }
+}
 
 interface AuthCtx {
   session: Session | null;
@@ -31,10 +55,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     (async () => {
       try {
         if (!EMAIL) throw new Error("Add VITE_APP_EMAIL to .env, then rebuild.");
+        const version = await currentVersion();
         const { data } = await supabase.auth.getSession();
         if (cancelled) return;
-        if (data.session) setSession(data.session);
-        else setNeedsPin(true);
+        if (data.session && !shouldRelock(version)) {
+          setSession(data.session);
+          markActive(version);
+        } else {
+          setNeedsPin(true);
+        }
       } catch (e) {
         if (!cancelled) setError((e as Error).message);
       } finally {
@@ -52,6 +81,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (signInError || !data.session) return false;
     setSession(data.session);
     setNeedsPin(false);
+    void currentVersion().then(markActive);
     return true;
   }, []);
 
