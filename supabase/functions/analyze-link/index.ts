@@ -20,6 +20,21 @@ async function tryTranscribeInstagram(meta: LinkMeta): Promise<void> {
   }
 }
 
+function normalizeTitle(t: string): string {
+  return t.toLowerCase().replace(/[^\p{L}\p{N}\s]/gu, "").replace(/\s+/g, " ").trim();
+}
+
+// Jaccard similarity on normalized word sets — cheap, no embeddings/extra API calls, good
+// enough to catch "same video re-shared with a different link" or "same article, different URL".
+function titleSimilarity(a: string, b: string): number {
+  const wa = new Set(normalizeTitle(a).split(" ").filter(Boolean));
+  const wb = new Set(normalizeTitle(b).split(" ").filter(Boolean));
+  if (!wa.size || !wb.size) return 0;
+  let inter = 0;
+  for (const w of wa) if (wb.has(w)) inter++;
+  return inter / new Set([...wa, ...wb]).size;
+}
+
 interface Analysis {
   title: string;
   summary: string;
@@ -35,6 +50,7 @@ interface Analysis {
   segments: { start: string; end: string; label: string }[];
   resources: { title: string; url: string }[];
   overlap: string | null;
+  related_index: number | null;
 }
 
 const slugify = (s: string) =>
@@ -46,7 +62,7 @@ const clamp = (n: unknown, lo: number, hi: number, dflt: number) => {
 };
 
 function buildPrompt(meta: LinkMeta, note: string | undefined, goal: string, interests: string[],
-  categories: { name: string; slug: string }[], recentTitles: string[]) {
+  categories: { name: string; slug: string }[], recentItems: { id: string; title: string }[]) {
   const system = `You are UpWise, a learning coach for a final-year B.Tech student whose goal is: "${goal}".
 Their interests: ${interests.join(", ") || "not specified"}.
 You analyze saved content (YouTube videos, reels, articles) and return STRICT JSON only, matching this schema:
@@ -64,7 +80,8 @@ You analyze saved content (YouTube videos, reels, articles) and return STRICT JS
   "takeaway": "If the transcript alone teaches the point well enough to skip watching, write the 3-5 line lesson here. Otherwise null.",
   "segments": [{"start":"mm:ss","end":"mm:ss","label":"what this part covers"}],
   "resources": [{"title":"...","url":"..."}],
-  "overlap": "If it duplicates or extends something already in the library, say which and how. Otherwise null."
+  "overlap": "If it duplicates or extends something already in the library, say which and how. Otherwise null.",
+  "related_index": index number (from the ALREADY IN LIBRARY list below) of the one item this most directly builds on or connects to conceptually, or null if nothing clearly does
 }
 Rules:
 - Category: pick an existing one if it fits: ${categories.map((c) => `${c.name} (${c.slug})`).join(", ") || "none yet"}. Otherwise propose a new broad one (e.g. "RAG", "LLMs", "DSA", "System Design", "Cloud & DevOps", "Career", "Math for ML", "Python", "Frontend"). Never create near-duplicates.
@@ -84,7 +101,7 @@ Rules:
   if (meta.transcript) parts.push(`TRANSCRIPT (may be truncated):\n${meta.transcript.slice(0, 12_000)}`);
   else if (meta.content) parts.push(`CONTENT (may be truncated):\n${meta.content.slice(0, 12_000)}`);
   else parts.push("NO TRANSCRIPT/CONTENT AVAILABLE.");
-  if (recentTitles.length) parts.push(`ALREADY IN LIBRARY (recent):\n- ${recentTitles.join("\n- ")}`);
+  if (recentItems.length) parts.push(`ALREADY IN LIBRARY (recent):\n${recentItems.map((r, i) => `[${i}] ${r.title}`).join("\n")}`);
   return { system, user: parts.join("\n\n") };
 }
 
@@ -108,12 +125,12 @@ Deno.serve(async (req) => {
     const [profileRes, catRes, recentRes] = await Promise.all([
       supabase.from("profiles").select("goal, interests").eq("id", user.id).single(),
       supabase.from("categories").select("id, name, slug").order("name"),
-      supabase.from("items").select("title").not("title", "is", null).order("created_at", { ascending: false }).limit(25),
+      supabase.from("items").select("id, title").not("title", "is", null).order("created_at", { ascending: false }).limit(25),
     ]);
     const goal = profileRes.data?.goal ?? "AI Engineer";
     const interests: string[] = profileRes.data?.interests ?? [];
     const categories = catRes.data ?? [];
-    const recentTitles = (recentRes.data ?? []).map((r) => r.title as string);
+    const recentItems = (recentRes.data ?? []) as { id: string; title: string }[];
 
     // YouTube bot-checks datacenter IPs, so the app fetches the transcript from the device and sends it along.
     const clientTranscript: string | undefined =
@@ -139,7 +156,7 @@ Deno.serve(async (req) => {
       ai = { error: "This link looks like it's been removed or is no longer accessible." };
     } else {
       try {
-        const { system, user: userMsg } = buildPrompt(meta, note, goal, interests, categories, recentTitles);
+        const { system, user: userMsg } = buildPrompt(meta, note, goal, interests, categories, recentItems);
         const model = MODELS.analyze();
         ai = await groqJson<Analysis>({ model, system, user: userMsg });
         ai.model = model;
@@ -147,6 +164,32 @@ Deno.serve(async (req) => {
         ai = { error: (e as Error).message };
       }
     }
+
+    // Only for fresh saves — re-analyzing an item obviously shouldn't flag itself as a
+    // duplicate of itself. Catches the case exact-canonical-URL matching above can't: the
+    // same video/article re-shared under a different link.
+    let possibleDuplicate: { id: string; title: string } | null = null;
+    const candidateTitle = ai.title || meta.title || "";
+    if (!reanalyzeId && candidateTitle) {
+      const { data: candidates } = await supabase.from("items")
+        .select("id, title, channel, duration_seconds")
+        .eq("source", parsed.source).not("title", "is", null).limit(500);
+      let best: { id: string; title: string; score: number } | null = null;
+      for (const c of candidates ?? []) {
+        const score = titleSimilarity(candidateTitle, c.title ?? "");
+        const channelOk = !meta.channel || !c.channel || meta.channel.toLowerCase() === c.channel.toLowerCase();
+        const durationOk = !meta.durationSeconds || !c.duration_seconds ||
+          Math.abs(meta.durationSeconds - c.duration_seconds) < Math.max(15, meta.durationSeconds * 0.15);
+        if (score >= 0.55 && channelOk && durationOk && (!best || score > best.score)) {
+          best = { id: c.id, title: c.title, score };
+        }
+      }
+      if (best) possibleDuplicate = { id: best.id, title: best.title };
+    }
+
+    const relatedItem = typeof ai.related_index === "number" && recentItems[ai.related_index]
+      ? { id: recentItems[ai.related_index].id, title: recentItems[ai.related_index].title }
+      : null;
 
     let categoryId: string | null = null;
     if (ai.category?.name) {
@@ -194,6 +237,8 @@ Deno.serve(async (req) => {
         model: ai.model ?? null,
         error: ai.error ?? null,
         transcript_status: meta.transcriptStatus ?? null,
+        possible_duplicate: possibleDuplicate,
+        related_item: relatedItem,
       },
       relevance_score: ai.relevance_score ? clamp(ai.relevance_score, 1, 5, 3) : null,
       estimated_minutes: clamp(ai.estimated_minutes, 1, 600, fallbackMinutes),

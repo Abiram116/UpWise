@@ -77,10 +77,13 @@ Living backlog of things to build next. Nothing here is built yet — this is th
 
 ## 8. Ideated, not yet built (from a brainstorm session)
 
-- **"Builds on" links between items** — connect related items beyond just duplicate/overlap flags (search across items is done; this is a separate persistent relationship between two library items).
-- **Resume from timestamp** — items already get AI-detected segments with timestamps; let an in-progress item jump back to where you stopped.
-- **Catch near-duplicate saves** — fuzzy match (title/channel/duration or normalized URL) beyond exact-URL dedup, ideally surfaced at save-time.
 - **Logo redesign** — current arrow mark's purple doesn't appear anywhere else in the app's actual sage/apricot palette. Explicitly deferred to last — do NOT start until asked.
+
+### Done from the same list
+
+- [x] **"Builds on" links between items.** The AI already gets a numbered list of recent library items and can point at one by index (`related_index`) as what a new save most directly builds on/connects to — resolved server-side to a real `{id, title}` and shown as a tappable "Builds on" link on the detail page. Distinct from the existing duplicate/overlap flag (that's "you already know this"; this is "this connects to that"). Verified live: saving a prompt-engineering article correctly linked to an existing RAG item in the same library.
+- [x] **Resume from timestamp.** Segments were already tappable and jumped to the right point in the video — what was missing was remembering which one you'd last used. Now persists the last-tapped segment per item (device-local) and highlights it "Resume here" next time, instead of a fully separate feature.
+- [x] **Catch near-duplicate saves.** Server-side Jaccard similarity on normalized title words (plus a channel/duration sanity check) runs at save-time against the existing library — a strong match surfaces immediately in the save sheet ("This looks similar to X, already in your library") with a one-tap "Skip this one" instead of silently becoming a second copy. Verified live against a seeded near-duplicate title.
 
 ## 9. Docs
 

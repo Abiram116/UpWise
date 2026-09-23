@@ -1,12 +1,13 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router";
 import { motion } from "motion/react";
 import { openUrl } from "@tauri-apps/plugin-opener";
-import { ArrowLeft, Check, ChevronDown, ExternalLink, ListPlus, Play, RefreshCw, SkipForward, Trash2, Clock } from "lucide-react";
+import { ArrowLeft, ArrowRight, Check, ChevronDown, ExternalLink, ListPlus, Play, RefreshCw, SkipForward, Trash2, Clock } from "lucide-react";
 import { logManualMinutes, useAnalyze, useCategories, useDeleteItemWithUndo, useItem, useSetStatus, useUpdateItem } from "../lib/api";
 import { isDesktop, isTauri } from "../lib/platform";
 import { confidence, fmtDuration, fmtMinutes, relativeTime, STATUS_LABEL } from "../lib/utils";
 import { haptic } from "../lib/haptics";
+import { getPref, setPref } from "../lib/store";
 import { useActiveSession, useSessionStore } from "../components/SessionBar";
 import { Chip, Dots, Page, Pill, Rise, Sheet, Skeleton, spring, useToast } from "../components/ui";
 import { useQueryClient } from "@tanstack/react-query";
@@ -34,6 +35,12 @@ export function ItemDetailScreen() {
   const [logOpen, setLogOpen] = useState(false);
   const [finishPromptOpen, setFinishPromptOpen] = useState(false);
   const [confirmDel, setConfirmDel] = useState(false);
+  const [lastSegment, setLastSegment] = useState<number | null>(null);
+
+  useEffect(() => {
+    if (!id) return;
+    getPref<number | null>(`lastSegment:${id}`, null).then(setLastSegment);
+  }, [id]);
 
   if (isLoading) return <Page><Skeleton h={220} r={28} /><Skeleton h={30} w="70%" /><Skeleton h={80} /></Page>;
   if (!item) return <Page><p className="body">Not found.</p></Page>;
@@ -125,14 +132,29 @@ export function ItemDetailScreen() {
         <Block title="Worth watching">
           <div className="col" style={{ gap: 4 }}>
             {ai.segments.map((s, i) => (
-              <button key={i} className="row body" style={{ gap: 12, textAlign: "left", minHeight: 44 }} onClick={() => open(item.source === "youtube" ? `${item.canonical_url}&t=${toSeconds(s.start)}s` : item.url)}>
-                <span className="kbd num">{s.start}–{s.end}</span><span style={{ color: "var(--on-surface)" }}>{s.label}</span>
+              <button key={i} className="row body" style={{ gap: 12, textAlign: "left", minHeight: 44 }}
+                onClick={() => {
+                  void setPref(`lastSegment:${item.id}`, i);
+                  setLastSegment(i);
+                  open(item.source === "youtube" ? `${item.canonical_url}&t=${toSeconds(s.start)}s` : item.url);
+                }}>
+                <span className="kbd num">{s.start}–{s.end}</span>
+                <span style={{ color: "var(--on-surface)" }}>{s.label}</span>
+                {lastSegment === i && <Chip tone="primary">Resume here</Chip>}
               </button>
             ))}
           </div>
         </Block>
       )}
       {!!ai.prerequisites?.length && <Block title="You should already know"><ul className="prose">{ai.prerequisites.map((p) => <li key={p}>{p}</li>)}</ul></Block>}
+      {ai.related_item && (
+        <Block title="Builds on">
+          <button className="row body" style={{ gap: 8, textAlign: "left", color: "var(--primary)", minHeight: 44 }}
+            onClick={() => nav(`/item/${ai.related_item!.id}`)}>
+            <ArrowRight size={15} /> <span className="truncate">{ai.related_item.title}</span>
+          </button>
+        </Block>
+      )}
       {ai.overlap && (
         <Block title="Overlap with your library">
           <p className="prose">{ai.overlap}</p>

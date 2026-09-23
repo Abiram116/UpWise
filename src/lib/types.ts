@@ -21,6 +21,8 @@ export interface ItemAI {
   model: string | null;
   error: string | null;
   transcript_status: string | null;
+  possible_duplicate: { id: string; title: string } | null;
+  related_item: { id: string; title: string } | null;
 }
 
 export interface Item {

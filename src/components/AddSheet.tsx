@@ -2,7 +2,7 @@ import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { useNavigate } from "react-router";
 import { AnimatePresence, motion } from "motion/react";
 import { AlertCircle, ArrowRight, Play, WifiOff } from "lucide-react";
-import { useAnalyze, useCategories, useUpdateItem, type AnalyzeStage } from "../lib/api";
+import { useAnalyze, useCategories, useSetStatus, useUpdateItem, type AnalyzeStage } from "../lib/api";
 import { extractUrl, fmtMinutes, detectSource, SOURCE_LABEL } from "../lib/utils";
 import { looksOffline, queueOfflineSave } from "../lib/offlineQueue";
 import type { Item } from "../lib/types";
@@ -147,9 +147,12 @@ function ResultCard({ result, onDone }: { result: { item: Item; duplicate: boole
   const nav = useNavigate();
   const toast = useToast();
   const update = useUpdateItem();
+  const setStatus = useSetStatus();
   const cats = useCategories();
   const start = useSessionStore((s) => s.start);
   const [cat, setCat] = useState(item.category?.id ?? null);
+  const [dupSkipped, setDupSkipped] = useState(false);
+  const possibleDup = item.ai?.possible_duplicate;
 
   const changeCat = async (id: string) => {
     setCat(id);
@@ -165,6 +168,16 @@ function ResultCard({ result, onDone }: { result: { item: Item; duplicate: boole
       </div>
 
       {item.thumbnail_url && <div className="thumb thumb-lg"><img src={item.thumbnail_url} alt="" /></div>}
+
+      {possibleDup && !dupSkipped && (
+        <div className="slab col" style={{ gap: 8 }}>
+          <p className="body" style={{ color: "var(--warm)" }}>This looks similar to "{possibleDup.title}", already in your library.</p>
+          <div className="row" style={{ gap: 8 }}>
+            <Pill variant="tonal" size="sm" onClick={() => { onDone(); nav(`/item/${possibleDup.id}`); }}>View that one</Pill>
+            <Pill variant="text" size="sm" onClick={async () => { await setStatus(item.id, "skipped"); setDupSkipped(true); toast("Skipped — you already have this"); }}>Skip this one</Pill>
+          </div>
+        </div>
+      )}
 
       <div>
         <h3 className="headline-sm selectable">{item.title}</h3>
