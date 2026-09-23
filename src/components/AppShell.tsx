@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
 import { NavLink, Outlet, useLocation, useNavigate } from "react-router";
 import { AnimatePresence, motion } from "motion/react";
 import { ArrowUpRight, BarChart3, Home, Library, Plus, Settings } from "lucide-react";
@@ -6,7 +6,7 @@ import { AddSheet, useAddQueue } from "./AddSheet";
 import { SessionBar } from "./SessionBar";
 import { onShare } from "../lib/share";
 import { extractUrl } from "../lib/utils";
-import { spring } from "./ui";
+import { Spinner, spring } from "./ui";
 
 const dests = [
   { to: "/", label: "Today", icon: Home },
@@ -35,12 +35,12 @@ export function AppShell() {
   const loc = useLocation();
   const [addOpen, setAddOpen] = useState(false);
   const showFab = loc.pathname === "/" || loc.pathname === "/library";
-  const mainRef = useRef<HTMLElement>(null);
 
-  // .app-main persists across routes (only the Outlet's child remounts), so its scroll
-  // position otherwise carries over — opening an item from partway down the list would
-  // land already scrolled. Reset it on every navigation.
-  useEffect(() => { mainRef.current?.scrollTo(0, 0); }, [loc.pathname]);
+  // .app-main has no overflow rule of its own — the window/document is the real scroll
+  // owner, and it persists across routes (only the Outlet's child remounts), so its scroll
+  // position otherwise carries over: opening an item from partway down a list would land
+  // already scrolled. Reset it on every navigation.
+  useEffect(() => { window.scrollTo(0, 0); }, [loc.pathname]);
 
   return (
     <div className="app">
@@ -52,10 +52,12 @@ export function AppShell() {
         {dests.map((d) => <Dest key={d.to} {...d} layoutId="rail-pill" />)}
       </aside>
 
-      <main className="app-main" ref={mainRef}>
-        <AnimatePresence mode="wait" initial={false}>
-          <div key={loc.pathname.split("/")[1] || "home"}><Outlet /></div>
-        </AnimatePresence>
+      <main className="app-main">
+        <Suspense fallback={<div style={{ display: "grid", placeItems: "center", minHeight: "40dvh" }}><Spinner size={26} /></div>}>
+          <AnimatePresence mode="wait" initial={false}>
+            <div key={loc.pathname.split("/")[1] || "home"}><Outlet /></div>
+          </AnimatePresence>
+        </Suspense>
       </main>
 
       <SessionBar />

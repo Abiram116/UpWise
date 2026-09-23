@@ -3,6 +3,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { supabase } from "./supabase";
 import { isTauri } from "./platform";
 import { youtubeId } from "./utils";
+import { useToast } from "../components/ui";
 import type { Category, CoachResult, DailyActivity, Item, ItemStatus, LearningSession, Profile } from "./types";
 
 const ITEM_SELECT = "*, category:categories(id, name, slug, color)";
@@ -107,6 +108,21 @@ export function useDeleteItem() {
   });
 }
 
+/** Hides the item immediately and only actually deletes it a few seconds later, so a mis-tap
+ * is recoverable via the toast's Undo action instead of being instantly permanent. */
+export function useDeleteItemWithUndo() {
+  const qc = useQueryClient();
+  const toast = useToast();
+  return (item: Item) => {
+    qc.setQueryData<Item[]>(["items"], (old) => old?.filter((i) => i.id !== item.id));
+    const timer = window.setTimeout(async () => {
+      const { error } = await supabase.from("items").delete().eq("id", item.id);
+      if (error) qc.setQueryData<Item[]>(["items"], (old) => (old ? [item, ...old] : old));
+    }, 4000);
+    toast("Deleted", { label: "Undo", onClick: () => { window.clearTimeout(timer); qc.setQueryData<Item[]>(["items"], (old) => (old ? [item, ...old] : old)); } });
+  };
+}
+
 // ---------- analyze (Rust transcript + edge function) ----------
 export type AnalyzeStage = "transcript" | "metadata" | "thinking" | "saving";
 
@@ -120,7 +136,7 @@ export interface TranscriptResult {
 
 export async function analyzeLink(
   url: string,
-  opts: { note?: string; addedVia?: "paste" | "share"; onStage?: (s: AnalyzeStage) => void } = {},
+  opts: { note?: string; addedVia?: "paste" | "share"; onStage?: (s: AnalyzeStage) => void; reanalyzeId?: string } = {},
 ): Promise<{ item: Item; duplicate: boolean; ai_error: string | null }> {
   let transcript: string | undefined;
   const vid = youtubeId(url);
@@ -134,7 +150,7 @@ export async function analyzeLink(
   opts.onStage?.("metadata");
   const stageTimer = setTimeout(() => opts.onStage?.("thinking"), 1500);
   const res = await supabase.functions.invoke("analyze-link", {
-    body: { url, note: opts.note, added_via: opts.addedVia ?? "paste", transcript },
+    body: { url, note: opts.note, added_via: opts.addedVia ?? "paste", transcript, reanalyze_id: opts.reanalyzeId },
   });
   clearTimeout(stageTimer);
   if (res.error) {

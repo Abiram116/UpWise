@@ -40,6 +40,12 @@ export function fmtDuration(seconds: number | null | undefined): string {
   return `${h}h ${m % 60 ? `${m % 60}m` : ""}`.trim();
 }
 
+export function fmtHour(h: number): string {
+  const period = h < 12 ? "am" : "pm";
+  const hour12 = h % 12 === 0 ? 12 : h % 12;
+  return `${hour12}${period}`;
+}
+
 export function fmtMinutes(min: number | null | undefined): string {
   if (!min) return "0 min";
   if (min < 60) return `${Math.round(min)} min`;

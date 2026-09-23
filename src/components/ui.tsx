@@ -132,22 +132,28 @@ export function Sheet({ open, onClose, children, title }: { open: boolean; onClo
 }
 
 // ---------- Snackbar ----------
-const ToastCtx = createContext<(msg: string) => void>(() => {});
+export interface ToastAction { label: string; onClick: () => void }
+const ToastCtx = createContext<(msg: string, action?: ToastAction) => void>(() => {});
 export function ToastProvider({ children }: { children: ReactNode }) {
-  const [msg, setMsg] = useState<string | null>(null);
+  const [toast, setToast] = useState<{ msg: string; action?: ToastAction } | null>(null);
   const timer = useRef<number | undefined>(undefined);
-  const show = useCallback((m: string) => {
-    setMsg(m);
+  const show = useCallback((msg: string, action?: ToastAction) => {
+    setToast({ msg, action });
     window.clearTimeout(timer.current);
-    timer.current = window.setTimeout(() => setMsg(null), 2800);
+    timer.current = window.setTimeout(() => setToast(null), action ? 4500 : 2800);
   }, []);
   return (
     <ToastCtx.Provider value={show}>
       {children}
       <AnimatePresence>
-        {msg && (
+        {toast && (
           <motion.div className="snackbar" initial={{ opacity: 0, y: 16, x: "-50%", scale: 0.96 }} animate={{ opacity: 1, y: 0, x: "-50%", scale: 1 }} exit={{ opacity: 0, y: 10, x: "-50%", scale: 0.98 }} transition={spring}>
-            {msg}
+            <span>{toast.msg}</span>
+            {toast.action && (
+              <button className="snackbar-action" onClick={() => { toast.action!.onClick(); window.clearTimeout(timer.current); setToast(null); }}>
+                {toast.action.label}
+              </button>
+            )}
           </motion.div>
         )}
       </AnimatePresence>

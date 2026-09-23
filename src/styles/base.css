@@ -16,6 +16,20 @@ body {
   touch-action: manipulation;
 }
 
+/* Edge-to-edge on Android draws the system status bar as an overlay, so anything we scroll
+   underneath it visually mixes with the clock/battery icons. A permanently fixed opaque strip
+   covering exactly the safe-area inset keeps that whole row ours, no matter how far the page
+   is scrolled — the same trick apps like Telegram use to keep their top bar always legible. */
+body::before {
+  content: "";
+  position: fixed;
+  top: 0; left: 0; right: 0;
+  height: var(--safe-top);
+  background: var(--surface);
+  z-index: 1000;
+  pointer-events: none;
+}
+
 p, h1, h2, h3, h4 { margin: 0; font-weight: 400; }
 .display { font-size: 40px; line-height: 1.08; letter-spacing: -0.025em; font-weight: 400; }
 .headline { font-size: 28px; line-height: 1.15; letter-spacing: -0.02em; font-weight: 400; }

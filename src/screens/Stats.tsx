@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
 import { animate, motion } from "motion/react";
 import { useActivity, useItems, useProfile, useSessions } from "../lib/api";
-import { backlogHealth, breakDaySet, byCategory, heatmap, streak, velocity, weekly } from "../lib/stats";
-import { fmtMinutes, pluralize } from "../lib/utils";
+import { activeHours, backlogHealth, breakDaySet, byCategory, heatmap, streak, velocity, weekly } from "../lib/stats";
+import { fmtHour, fmtMinutes, pluralize } from "../lib/utils";
 import { Empty, ErrorState, Page, Rise, Skeleton, easeOut } from "../components/ui";
 
 function Count({ to, suffix = "" }: { to: number; suffix?: string }) {
@@ -33,6 +33,8 @@ export function StatsScreen() {
       totalMinutes: Math.round(activity.data.reduce((a, d) => a + d.seconds, 0) / 60),
       totalDone: items.data.filter((i) => i.status === "completed").length,
       concepts: new Set(items.data.filter((i) => i.status === "completed").flatMap((i) => i.ai?.key_concepts ?? [])).size,
+      // Only worth claiming once there's enough history to not be a coincidence.
+      bestHour: sessions.data.length >= 5 ? activeHours(sessions.data)[0] : null,
     };
   }, [activity.data, items.data, sessions.data, profile.data]);
 
@@ -61,6 +63,7 @@ export function StatsScreen() {
         </p>
         <p className="body" style={{ marginTop: 10 }}>
           This week: {data.velocity.thisWeek} done, {trendWord} your usual {data.velocity.avgPrev}/week.
+          {data.bestHour != null && ` You learn best around ${fmtHour(data.bestHour)}.`}
         </p>
       </Rise>
 

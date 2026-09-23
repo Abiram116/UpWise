@@ -56,10 +56,10 @@ export function HomeScreen() {
     <Page>
       <Rise>
         <header>
-          <p className="meta row" style={{ gap: 10 }}>
+          <p className="meta row" style={{ gap: 10, fontSize: 15 }}>
             <span>{greeting()}{name ? `, ${name}` : ""}</span>
             {st && st.current > 0 && (
-              <span className="row" style={{ gap: 4, color: "var(--warm)" }}><Flame size={14} strokeWidth={2.4} /> <b className="num">{st.current}</b>-day streak</span>
+              <span className="row" style={{ gap: 4, color: "var(--warm)" }}><Flame size={15} strokeWidth={2.4} /> <b className="num">{st.current}</b>-day streak</span>
             )}
           </p>
           <h1 className="display">{coached ? coach!.headline : pick ? "Up next" : "All clear"}</h1>

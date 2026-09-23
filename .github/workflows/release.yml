@@ -37,7 +37,9 @@ jobs:
         with:
           tag_name: ${{ github.ref_name }}
           name: "UpWise ${{ github.ref_name }}"
-          body: "See the assets below. Windows: run the .exe installer (auto-updates from now on). Android: install the .apk."
+          body: |
+            Windows: run the .exe installer (auto-updates from now on). Android: install the .apk.
+          generate_release_notes: true
           draft: false
           prerelease: false
 

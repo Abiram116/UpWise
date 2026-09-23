@@ -156,6 +156,19 @@ select.input { padding-right: 36px; appearance: none; -webkit-appearance: none; 
 
 /* ---------- sheet / dialog ---------- */
 .scrim { position: fixed; inset: 0; z-index: 50; background: rgba(0, 0, 0, 0.42); }
+
+.whatsnew-scrim {
+  position: fixed; inset: 0; z-index: 200; background: rgba(0, 0, 0, 0.6);
+  display: flex; align-items: center; justify-content: center; padding: var(--gutter);
+}
+.whatsnew-card {
+  width: 100%; max-width: 420px; background: var(--surface-bright); border-radius: var(--r-sheet);
+  padding: var(--s-7) var(--s-6); display: flex; flex-direction: column; align-items: center; gap: 10px;
+  text-align: center; box-shadow: var(--shadow-float);
+}
+.whatsnew-list { list-style: none; margin: var(--s-4) 0 0; padding: 0; display: flex; flex-direction: column; gap: 10px; width: 100%; text-align: left; }
+.whatsnew-list li { font-size: 14.5px; line-height: 1.4; color: var(--on-surface-2); padding-left: 18px; position: relative; }
+.whatsnew-list li::before { content: ""; position: absolute; left: 0; top: 7px; width: 6px; height: 6px; border-radius: 999px; background: var(--primary); }
 .sheet {
   position: fixed; left: 0; right: 0; bottom: 0; z-index: 51;
   background: var(--surface-low); border-radius: var(--r-sheet) var(--r-sheet) 0 0;
@@ -177,7 +190,9 @@ select.input { padding-right: 36px; appearance: none; -webkit-appearance: none; 
   position: fixed; left: 50%; bottom: calc(var(--nav-h) + var(--safe-bottom) + var(--s-5)); z-index: 60;
   background: var(--inverse-surface); color: var(--inverse-on-surface); padding: 12px 18px; border-radius: 14px;
   font-size: 14px; font-weight: 500; box-shadow: var(--shadow-float); white-space: nowrap; max-width: calc(100vw - 40px);
+  display: flex; align-items: center; gap: 16px;
 }
+.snackbar-action { color: var(--primary-container); font-weight: 700; flex-shrink: 0; }
 @media (min-width: 840px) { .snackbar { bottom: var(--s-7); } }
 
 .empty { padding: var(--s-9) var(--s-5); display: flex; flex-direction: column; gap: 8px; color: var(--on-surface-3); }

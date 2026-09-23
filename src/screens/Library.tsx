@@ -2,13 +2,13 @@ import { useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "react-router";
 import { motion } from "motion/react";
 import { Search, Trash2, X } from "lucide-react";
-import { useCategories, useItems, useSetStatus, useDeleteItem } from "../lib/api";
+import { useCategories, useItems, useSetStatus, useDeleteItemWithUndo } from "../lib/api";
 import { neglectedItems } from "../lib/stats";
 import { getPref, setPref } from "../lib/store";
 import { relativeTime, pluralize } from "../lib/utils";
 import type { Item, ItemStatus } from "../lib/types";
 import { ItemRow } from "../components/ItemCard";
-import { Chip, Empty, ErrorState, Page, Pill, Rise, Segmented, Sheet, Skeleton, stagger, useToast } from "../components/ui";
+import { Chip, Empty, ErrorState, Page, Pill, Rise, Segmented, Sheet, Skeleton, stagger } from "../components/ui";
 
 type Filter = "todo" | "done" | "all";
 const GROOM_SNOOZE_DAYS = 7;
@@ -126,20 +126,19 @@ export function LibraryScreen() {
 
 function GroomRow({ item }: { item: Item }) {
   const setStatus = useSetStatus();
-  const del = useDeleteItem();
-  const toast = useToast();
+  const del = useDeleteItemWithUndo();
   const [gone, setGone] = useState(false);
   if (gone) return null;
   return (
     <motion.div layout className="row" style={{ gap: 10, padding: "10px 4px", alignItems: "center", borderBottom: "1px solid var(--surface-high)" }}>
       <div className="grow col" style={{ gap: 2 }}>
         <div className="truncate" style={{ fontSize: 14.5, fontWeight: 500 }}>{item.title ?? item.url}</div>
-        <div className="meta">Saved {relativeTime(item.created_at)}</div>
+        <div className="meta">{item.ai?.summary ?? `Saved ${relativeTime(item.created_at)}`}</div>
       </div>
       <Pill variant="text" size="sm" onClick={() => setGone(true)}>Keep</Pill>
       <Pill variant="tonal" size="sm" onClick={async () => { await setStatus(item.id, "skipped"); setGone(true); }}>Skip</Pill>
       <button aria-label="Delete" className="pill pill-text pill-icon" style={{ color: "var(--error)" }}
-        onClick={async () => { await del.mutateAsync(item.id); setGone(true); toast("Deleted"); }}>
+        onClick={() => { del(item); setGone(true); }}>
         <Trash2 size={16} />
       </button>
     </motion.div>

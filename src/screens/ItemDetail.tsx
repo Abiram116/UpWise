@@ -2,8 +2,8 @@ import { useState } from "react";
 import { useNavigate, useParams } from "react-router";
 import { motion } from "motion/react";
 import { openUrl } from "@tauri-apps/plugin-opener";
-import { ArrowLeft, Check, ChevronDown, ExternalLink, ListPlus, Play, SkipForward, Trash2, Clock } from "lucide-react";
-import { logManualMinutes, useCategories, useDeleteItem, useItem, useSetStatus, useUpdateItem } from "../lib/api";
+import { ArrowLeft, Check, ChevronDown, ExternalLink, ListPlus, Play, RefreshCw, SkipForward, Trash2, Clock } from "lucide-react";
+import { logManualMinutes, useAnalyze, useCategories, useDeleteItemWithUndo, useItem, useSetStatus, useUpdateItem } from "../lib/api";
 import { isDesktop, isTauri } from "../lib/platform";
 import { confidence, fmtDuration, fmtMinutes, relativeTime, STATUS_LABEL } from "../lib/utils";
 import { haptic } from "../lib/haptics";
@@ -23,7 +23,9 @@ export function ItemDetailScreen() {
   const { data: item, isLoading } = useItem(id);
   const setStatus = useSetStatus();
   const update = useUpdateItem();
-  const del = useDeleteItem();
+  const del = useDeleteItemWithUndo();
+  const analyze = useAnalyze();
+  const [reanalyzing, setReanalyzing] = useState(false);
   const cats = useCategories();
   const active = useActiveSession();
   const start = useSessionStore((s) => s.start);
@@ -165,7 +167,7 @@ export function ItemDetailScreen() {
       {item.has_transcript && (
         <Rise>
           <button className="row title-sm" style={{ gap: 8, minHeight: 44 }} onClick={() => setShowTranscript((v) => !v)}>
-            <ChevronDown size={18} style={{ transform: showTranscript ? "rotate(180deg)" : undefined, transition: "transform .25s var(--spring)" }} /> Transcript
+            <ChevronDown size={18} style={{ transform: showTranscript ? "rotate(180deg)" : undefined, transition: "transform .25s var(--spring)" }} /> {item.source === "article" ? "Full text" : "Transcript"}
           </button>
           {showTranscript && (
             <motion.div className="slab" initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }} transition={spring} style={{ overflow: "hidden", marginTop: 8 }}>
@@ -178,7 +180,17 @@ export function ItemDetailScreen() {
       <Rise>
         <div className="row between" style={{ paddingTop: 8 }}>
           <span className="meta">{ai.model ? `Analyzed by ${ai.model}` : ai.error ? `AI error: ${ai.error}` : ""}</span>
-          <Pill variant="text" size="sm" onClick={() => setConfirmDel(true)} style={{ color: "var(--error)" }}><Trash2 size={16} /> Delete</Pill>
+          <div className="row" style={{ gap: 4 }}>
+            <Pill variant="text" size="sm" loading={reanalyzing} onClick={async () => {
+              setReanalyzing(true);
+              try {
+                await analyze.mutateAsync([item.url, { note: item.notes ?? undefined, reanalyzeId: item.id }]);
+                toast("Re-analyzed");
+              } catch (e) { toast((e as Error).message); }
+              finally { setReanalyzing(false); }
+            }}><RefreshCw size={16} /> Re-analyze</Pill>
+            <Pill variant="text" size="sm" onClick={() => setConfirmDel(true)} style={{ color: "var(--error)" }}><Trash2 size={16} /> Delete</Pill>
+          </div>
         </div>
       </Rise>
 
@@ -186,7 +198,7 @@ export function ItemDetailScreen() {
         <p className="body" style={{ marginBottom: 18 }}>This removes it and its learning time from your stats.</p>
         <div className="row" style={{ gap: 8 }}>
           <Pill variant="tonal" size="lg" className="grow" onClick={() => setConfirmDel(false)}>Cancel</Pill>
-          <Pill variant="danger" size="lg" className="grow" onClick={async () => { await del.mutateAsync(item.id); nav("/library", { replace: true }); toast("Deleted"); }}>Delete</Pill>
+          <Pill variant="danger" size="lg" className="grow" onClick={() => { setConfirmDel(false); del(item); nav("/library", { replace: true }); }}>Delete</Pill>
         </div>
       </Sheet>
 

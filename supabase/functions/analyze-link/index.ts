@@ -99,10 +99,11 @@ Deno.serve(async (req) => {
     if (!rawUrl) return json({ error: "url required" }, 400);
 
     const parsed = parseLink(rawUrl);
+    const reanalyzeId: string | undefined = typeof body.reanalyze_id === "string" ? body.reanalyze_id : undefined;
 
     const { data: existing } = await supabase.from("items").select("id, title, status")
       .eq("canonical_url", parsed.canonicalUrl).maybeSingle();
-    if (existing) return json({ duplicate: true, item: existing });
+    if (existing && existing.id !== reanalyzeId) return json({ duplicate: true, item: existing });
 
     const [profileRes, catRes, recentRes] = await Promise.all([
       supabase.from("profiles").select("goal, interests").eq("id", user.id).single(),
@@ -153,9 +154,7 @@ Deno.serve(async (req) => {
     }
 
     const fallbackMinutes = meta.durationSeconds ? Math.max(1, Math.round(meta.durationSeconds / 60)) : 10;
-    const { error: insertErr, data: item } = await supabase.from("items").insert({
-      user_id: user.id,
-      url: rawUrl.trim(),
+    const refreshed = {
       canonical_url: meta.canonicalUrl,
       source: meta.source,
       external_id: meta.externalId,
@@ -164,13 +163,15 @@ Deno.serve(async (req) => {
       channel: meta.channel,
       thumbnail_url: meta.thumbnailUrl,
       duration_seconds: meta.durationSeconds,
-      transcript: meta.transcript,
+      // Articles have no separate "transcript" concept — this column just means "the text we
+      // actually read," so reuse it for article body text too instead of leaving it empty
+      // even though the AI clearly had real content to work from (has_transcript was true).
+      transcript: meta.transcript ?? meta.content,
       // Name says "transcript" but this really means "had substantial source text to analyze from" —
       // covers article body text too, so the UI can show a trust badge when analysis worked from just a title.
       has_transcript: !!(meta.transcript || meta.content),
       category_id: categoryId,
       tags: (ai.tags ?? []).slice(0, 8).map((t) => String(t).toLowerCase().slice(0, 30)),
-      status: "inbox",
       ai: {
         summary: ai.summary ?? null,
         key_concepts: ai.key_concepts ?? [],
@@ -187,9 +188,17 @@ Deno.serve(async (req) => {
       },
       relevance_score: ai.relevance_score ? clamp(ai.relevance_score, 1, 5, 3) : null,
       estimated_minutes: clamp(ai.estimated_minutes, 1, 600, fallbackMinutes),
-      notes: note ?? null,
-      added_via: addedVia,
-    }).select("*, category:categories(id, name, slug, color)").single();
+    };
+
+    // Re-analyzing an existing item refreshes its content without resetting its status/progress
+    // (an already-completed item shouldn't jump back to "inbox" just because you asked for a
+    // fresh take on it) or its saved note.
+    const { error: insertErr, data: item } = reanalyzeId
+      ? await supabase.from("items").update(refreshed).eq("id", reanalyzeId)
+        .select("*, category:categories(id, name, slug, color)").single()
+      : await supabase.from("items").insert({
+        user_id: user.id, url: rawUrl.trim(), status: "inbox", notes: note ?? null, added_via: addedVia, ...refreshed,
+      }).select("*, category:categories(id, name, slug, color)").single();
 
     if (insertErr) return json({ error: insertErr.message }, 500);
     return json({ item, ai_error: ai.error ?? null });
