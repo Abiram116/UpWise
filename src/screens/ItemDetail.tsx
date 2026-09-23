@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useLocation, useNavigate, useParams } from "react-router";
 import { motion } from "motion/react";
-import { ArrowLeft, ArrowRight, Check, ChevronRight, Copy, ExternalLink, FileText, ListPlus, Play, RefreshCw, SkipForward, Trash2, Clock } from "lucide-react";
+import { ArrowLeft, ArrowRight, Check, ChevronRight, Copy, Undo2, ExternalLink, FileText, ListPlus, Play, RefreshCw, SkipForward, Trash2, Clock } from "lucide-react";
 import { logManualMinutes, useAnalyze, useCategories, useDeleteItemWithUndo, useItem, useItemTranscript, useSetStatus, useUpdateItem } from "../lib/api";
 import { isDesktop } from "../lib/platform";
 import { openExternal as open } from "../lib/links";
@@ -114,13 +114,18 @@ export function ItemDetailScreen() {
             {!done && (isActive
               ? <Pill variant="filled" size="lg" className="grow" onClick={finish}><Check size={18} strokeWidth={2.5} /> Done learning</Pill>
               : <Pill variant="filled" size="lg" className="grow" onClick={async () => { try { await start(item); if (!embed) void open(item.url); } catch (e) { fail("Couldn't start")(e); } }}><Play size={18} fill="currentColor" /> Start</Pill>)}
-            <Pill variant="tonal" size="lg" className={done ? "grow" : ""} onClick={() => open(item.url)}><ExternalLink size={17} /> Open</Pill>
+            {done && (
+              <Pill variant="filled" size="lg" className="grow" onClick={() => setStatus(item.id, "queued").then(() => toast("Back on your To learn list — logged time is kept"), fail("Couldn't change it"))}>
+                <Undo2 size={17} /> Mark not done
+              </Pill>
+            )}
+            <Pill variant="tonal" size="lg" onClick={() => open(item.url)}><ExternalLink size={17} /> Open</Pill>
           </div>
           <div className="row wrap" style={{ gap: 4, marginLeft: -14 }}>
             {item.status === "inbox" && <Pill variant="text" size="sm" onClick={() => setStatus(item.id, "queued").catch(fail("Couldn't queue it"))}><ListPlus size={16} /> Queue</Pill>}
             {!done && !isActive && <Pill variant="text" size="sm" onClick={finish}><Check size={16} /> Mark done</Pill>}
             {!done && item.status !== "skipped" && <Pill variant="text" size="sm" onClick={() => { setStatus(item.id, "skipped").then(() => toast("Skipped"), fail("Couldn't skip it")); }}><SkipForward size={16} /> Skip</Pill>}
-            {(done || item.status === "skipped") && <Pill variant="text" size="sm" onClick={() => setStatus(item.id, "inbox").catch(fail("Couldn't move it"))}>Back to inbox</Pill>}
+            {item.status === "skipped" && <Pill variant="text" size="sm" onClick={() => setStatus(item.id, "queued").then(() => toast("Back on your To learn list"), fail("Couldn't move it"))}><Undo2 size={16} /> Back to To learn</Pill>}
             <Pill variant="text" size="sm" onClick={() => setLogOpen(true)}><Clock size={16} /> Log time</Pill>
           </div>
         </div>

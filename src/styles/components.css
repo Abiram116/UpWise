@@ -269,3 +269,5 @@ select.input { padding-right: 36px; appearance: none; -webkit-appearance: none; 
 .conn-slab { margin-bottom: var(--s-6); }
 .slab-warm .body { color: color-mix(in srgb, var(--on-warm-container) 82%, transparent); }
 .find-hit { background: var(--warm-container); color: var(--on-warm-container); border-radius: 4px; padding: 0 2px; }
+/* in-app wins (goal reached, streaks) — the only celebratory surface; never a phone notification */
+.snackbar-celebrate { background: var(--primary-container); color: var(--on-primary-container); white-space: normal; gap: 10px; padding: 14px 18px; border-radius: 18px; width: max-content; font-size: 15px; }

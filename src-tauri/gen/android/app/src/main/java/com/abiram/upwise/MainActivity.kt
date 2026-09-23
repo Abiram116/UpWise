@@ -122,6 +122,13 @@ class MainActivity : TauriActivity() {
       }
     }
 
+    // A notification's "Later"/"Skip" button has to open the app to be delivered at all; once
+    // the page has handled it, step back out so it feels like it never left the notification.
+    @JavascriptInterface
+    fun moveToBackground() {
+      handler.post { moveTaskToBack(true) }
+    }
+
     // Deep-links to this app's notification settings — once a permission request has been
     // denied, Android won't show the dialog again, so this is the only way back.
     @JavascriptInterface

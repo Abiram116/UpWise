@@ -10,6 +10,7 @@ declare global {
       canInstallPackages?: () => boolean;
       openInstallPermissionSettings?: () => void;
       openNotificationSettings?: () => void;
+      moveToBackground?: () => void;
     };
     /** Called by MainActivity on the system back gesture; true = handled in-app. */
     __upwiseBack?: () => boolean;

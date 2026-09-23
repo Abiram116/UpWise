@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Bell, ChevronRight, Coffee, Copy, CopyCheck, Download, FileText, Moon, RefreshCw, Target, User } from "lucide-react";
-import { useActivity, useCategories, useProfile, useUpdateProfile, useItems, useSessions } from "../lib/api";
-import { ensurePermission, replanNotifications, sendTestNotification, settingsOf } from "../lib/notifications";
+import { useActivity, useProfile, useUpdateProfile, useItems, useSessions } from "../lib/api";
+import { ensurePermission, replanNotifications, settingsOf } from "../lib/notifications";
 import { describeError, isNetworkError } from "../lib/errors";
 import "../lib/android-bridge";
 import { checkForUpdate, currentVersion, type UpdateInfo } from "../lib/updater";
@@ -9,19 +9,17 @@ import { isTauri, platform } from "../lib/platform";
 import { RELEASE_REPO } from "../lib/config";
 import { applyTheme, type Theme } from "../theme";
 import { formatSkillsExport, skillsSummary, isOnBreak } from "../lib/stats";
-import { isoDay } from "../lib/utils";
+import { isoDay, pluralize } from "../lib/utils";
 import { extractNotes } from "../lib/changelog";
 import type { Profile } from "../lib/types";
 import { useCoach } from "./Home";
 import { Chip, ErrorState, Page, Pill, Rise, Segmented, Sheet, Skeleton, Switch, useToast } from "../components/ui";
 
 const TARGETS = [15, 30, 45, 60, 90];
-const HOURS = Array.from({ length: 24 }, (_, h) => `${String(h).padStart(2, "0")}:00`);
 
 export function SettingsScreen() {
   const profile = useProfile();
   const update = useUpdateProfile();
-  const cats = useCategories();
   const items = useItems();
   const sessions = useSessions(30);
   const activity = useActivity(14);
@@ -61,7 +59,7 @@ export function SettingsScreen() {
     catch (e) { fail("Couldn't save that")(e); return; }
     if (p && items.data && sessions.data) {
       const n = await replanNotifications({ profile: { ...p, settings: next }, items: items.data, sessions: sessions.data, coach, activity: activity.data });
-      if (patch.enabled !== undefined) toast(patch.enabled ? `Nudges on · ${n} scheduled` : "Nudges off");
+      if (patch.enabled !== undefined) toast(patch.enabled ? (onBreak ? "On — they'll start when your break ends" : `On · ${pluralize(n, "notification")} planned for the next 2 days`) : "Notifications off");
     }
   };
 
@@ -117,44 +115,12 @@ export function SettingsScreen() {
         </button>
       </Group>
 
-      <Group title="Nudges" hint="Times come from when you actually learn. You stay in control.">
+      <Group title="Notifications" hint={onBreak ? "Paused while you're on a break." : "A morning plan, a nudge for things waiting too long, and a reminder when today's goal is close — timed from when you actually learn. Wins show up in the app, not as notifications."}>
         <div className="setting">
           <span className="setting-icon"><Bell size={18} /></span>
-          <div className="grow"><div className="title-sm">Notifications</div><div className="meta">{isTauri ? "About what to learn next" : "Available in the installed app"}</div></div>
-          <Switch on={s.enabled} onChange={(v) => saveSettings({ enabled: v })} label="Notifications" />
+          <div className="grow"><div className="title-sm">Smart notifications</div><div className="meta">{isTauri ? "UpWise decides when — you just get the useful ones" : "Available in the installed app"}</div></div>
+          <Switch on={s.enabled} onChange={(v) => saveSettings({ enabled: v, weekly_recap: v })} label="Smart notifications" />
         </div>
-        <div className="setting">
-          <div className="grow"><div className="title-sm">Weekly recap</div><div className="meta">Sunday evening — what you learned, streak, what's next</div></div>
-          <Switch on={!!p?.settings.weekly_recap} onChange={(v) => saveSettings({ weekly_recap: v })} label="Weekly recap" />
-        </div>
-        {s.enabled && (
-          <>
-            <div className="setting">
-              <div className="grow title-sm">Max per day</div>
-              <Segmented value={String(s.max_per_day)} onChange={(v) => saveSettings({ max_per_day: +v })} options={[{ value: "1", label: "1" }, { value: "2", label: "2" }, { value: "3", label: "3" }]} />
-            </div>
-            <div className="setting">
-              <div className="grow"><div className="title-sm">Quiet hours</div><div className="meta">No nudges in this window</div></div>
-              <select className="input" style={{ width: 92, height: 40, padding: "0 12px" }} value={s.quiet_start} onChange={(e) => saveSettings({ quiet_start: e.target.value })}>{HOURS.map((h) => <option key={h}>{h}</option>)}</select>
-              <span className="meta">to</span>
-              <select className="input" style={{ width: 92, height: 40, padding: "0 12px" }} value={s.quiet_end} onChange={(e) => saveSettings({ quiet_end: e.target.value })}>{HOURS.map((h) => <option key={h}>{h}</option>)}</select>
-            </div>
-            {!!cats.data?.length && (
-              <div className="setting" style={{ flexWrap: "wrap" }}>
-                <div style={{ width: "100%" }}><div className="title-sm">Nudge about</div><div className="meta">Tap to mute an area</div></div>
-                <div className="chips">
-                  {cats.data.map((c) => {
-                    const muted = s.muted_categories.includes(c.id);
-                    return <Chip key={c.id} active={!muted} onClick={() => saveSettings({ muted_categories: muted ? s.muted_categories.filter((x) => x !== c.id) : [...s.muted_categories, c.id] })}>{c.name}</Chip>;
-                  })}
-                </div>
-              </div>
-            )}
-            <button className="setting" onClick={async () => { if (await sendTestNotification()) toast("Sent a test nudge"); else notificationsBlocked(); }}>
-              <div className="grow title-sm" style={{ color: "var(--primary)" }}>Send a test notification</div>
-            </button>
-          </>
-        )}
       </Group>
 
       <Group title="Export" hint="A summary of what you've learned, by area — for a resume or LinkedIn.">

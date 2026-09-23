@@ -17,6 +17,10 @@ import { WindowControls } from "./components/WindowControls";
 import { Spinner } from "./components/ui";
 import { HomeScreen, useCoach } from "./screens/Home";
 import { WhatsNewGate } from "./components/WhatsNew";
+import { useSessionStore } from "./components/SessionBar";
+import { breakDaySet, streak, todayMinutes } from "./lib/stats";
+import { haptic } from "./lib/haptics";
+import "./lib/android-bridge";
 
 // Home is the one screen almost every cold start needs immediately — everything else is
 // lazy so the initial bundle the WebView has to parse before first paint stays small.
@@ -76,6 +80,7 @@ function Gate() {
       <WindowControls />
       <Background />
       <GlobalErrors />
+      <Celebrations />
       <Routes>
         <Route element={<AppShell />}>
           <Route path="/" element={<HomeScreen />} />
@@ -97,6 +102,7 @@ function Background() {
   const activity = useActivity(14);
   const { coach } = useCoach(false);
   const setStatus = useSetStatus();
+  const startSession = useSessionStore((s) => s.start);
   const nav = useNavigate();
   const qc = useQueryClient();
   const toast = useToast();
@@ -126,22 +132,25 @@ function Background() {
   const itemsRef = useRef<typeof items.data>(undefined);
   useEffect(() => { itemsRef.current = items.data; }, [items.data]);
 
+  // Replan once a day — and again the moment today's goal is met, so the evening "minutes to
+  // your goal" nudge disappears instead of nagging about something already done.
+  const goalMet = !!(profile.data && activity.data && todayMinutes(activity.data) >= (profile.data.daily_target_minutes ?? 30));
   useEffect(() => {
     if (!isTauri || !profile.data || !items.data || !sessions.data || !activity.data) return;
-    const today = new Date().toDateString();
+    const key = `${new Date().toDateString()}|${goalMet}`;
     let cancelled = false;
     (async () => {
       const lastPlanned = await getPref<string>("notifPlannedDate", "");
-      if (cancelled || lastPlanned === today || plannedRef.current === today) return;
-      plannedRef.current = today;
-      await setPref("notifPlannedDate", today);
+      if (cancelled || lastPlanned === key || plannedRef.current === key) return;
+      plannedRef.current = key;
+      await setPref("notifPlannedDate", key);
       void replanNotifications({ profile: profile.data!, items: items.data!, sessions: sessions.data!, coach, activity: activity.data });
     })();
     return () => { cancelled = true; };
     // Deliberately excludes `coach` — a coach refresh should not re-trigger a full OS reschedule;
     // only a new calendar day (or an explicit settings change, handled separately) should.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [profile.data, items.data, sessions.data, activity.data]);
+  }, [profile.data, items.data, sessions.data, activity.data, goalMet]);
 
   useEffect(() => {
     if (!isTauri) return;
@@ -161,13 +170,79 @@ function Background() {
         const current = itemId ? itemsRef.current?.find((i) => i.id === itemId) : undefined;
         const knownGone = loaded && itemId && !current;
         const knownResolved = current?.status === "completed" || current?.status === "skipped";
-        if (payload.actionId === "skip" && itemId) { if (!knownGone && !knownResolved) void setStatus(itemId, "skipped"); return; }
-        if (payload.actionId === "snooze") { void snoozeNotification(payload.title, payload.body ?? "", itemId); return; }
+        const action = payload.actionId === "snooze" ? "later" : payload.actionId;
+        // Android can only deliver a button tap by opening the app — for the "not now" answers,
+        // do the thing and step straight back out of the way.
+        const backToWhatYouWereDoing = () => window.AndroidNative?.moveToBackground?.();
+        if (action === "skip") {
+          if (itemId && !knownGone && !knownResolved) void setStatus(itemId, "skipped").catch(() => {});
+          backToWhatYouWereDoing();
+          return;
+        }
+        if (action === "later" || action === "tomorrow") {
+          void snoozeNotification(payload.title, payload.body ?? "", itemId, action);
+          backToWhatYouWereDoing();
+          return;
+        }
+        if (action === "start" && current && !knownResolved) {
+          void startSession(current).catch(() => {});
+          nav(`/item/${current.id}`);
+          return;
+        }
         nav(itemId && !knownGone ? `/item/${itemId}` : "/");
       }).then((l) => { off = () => l.unregister(); });
     }).catch(() => {});
     return () => off?.();
-  }, [nav, setStatus]);
+  }, [nav, setStatus, startSession]);
+
+  return null;
+}
+
+const STREAK_MILESTONES = [3, 7, 14, 30, 50, 100, 200, 365];
+
+/** In-app wins: today's goal, streak milestones, an emptied backlog. Each fires once (keyed by
+ * day or milestone) and only from real data changes, so reopening the app never repeats one. */
+function Celebrations() {
+  const profile = useProfile();
+  const items = useItems();
+  const activity = useActivity(14);
+  const toast = useToast();
+  const pendingCount = items.data?.filter((i) => i.status === "inbox" || i.status === "queued" || i.status === "in_progress").length;
+  const prevPending = useRef<number | undefined>(undefined);
+
+  useEffect(() => {
+    if (!profile.data || !activity.data) return;
+    const target = profile.data.daily_target_minutes ?? 30;
+    const mins = todayMinutes(activity.data);
+    const st = streak(activity.data, breakDaySet(profile.data.settings)).current;
+    const day = new Date().toDateString();
+    (async () => {
+      if (mins >= target && (await getPref("celebratedGoal", "")) !== day) {
+        await setPref("celebratedGoal", day);
+        haptic.success();
+        toast(`Today's goal done — ${mins} min learned.${st > 1 ? ` ${st}-day streak.` : ""}`, undefined, { tone: "celebrate" });
+        return;
+      }
+      const milestone = [...STREAK_MILESTONES].reverse().find((m) => st >= m) ?? 0;
+      const celebrated = await getPref("celebratedStreak", 0);
+      // A broken streak resets the ladder, so a new run gets its milestones again.
+      if (milestone < celebrated) { await setPref("celebratedStreak", milestone); return; }
+      if (milestone && celebrated < milestone) {
+        await setPref("celebratedStreak", milestone);
+        haptic.success();
+        toast(`${milestone}-day streak. That's a habit now.`, undefined, { tone: "celebrate" });
+      }
+    })();
+  }, [profile.data, activity.data, toast]);
+
+  useEffect(() => {
+    if (pendingCount === undefined) return;
+    if (prevPending.current && prevPending.current > 0 && pendingCount === 0) {
+      haptic.success();
+      toast("Backlog cleared — everything you saved is learned or sorted.", undefined, { tone: "celebrate" });
+    }
+    prevPending.current = pendingCount;
+  }, [pendingCount, toast]);
 
   return null;
 }

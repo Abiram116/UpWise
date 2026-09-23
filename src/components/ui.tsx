@@ -1,6 +1,6 @@
 import { AnimatePresence, motion, useDragControls, useReducedMotion, type Variants, type Transition } from "motion/react";
 import { createContext, useCallback, useContext, useEffect, useRef, useState, type ButtonHTMLAttributes, type MouseEvent, type ReactNode } from "react";
-import { Check, X } from "lucide-react";
+import { Check, Sparkles, X } from "lucide-react";
 import { cx } from "../lib/utils";
 import { haptic } from "../lib/haptics";
 import { describeError } from "../lib/errors";
@@ -143,21 +143,23 @@ export function Sheet({ open, onClose, children, title, className }: { open: boo
 
 // ---------- Snackbar ----------
 export interface ToastAction { label: string; onClick: () => void }
-const ToastCtx = createContext<(msg: string, action?: ToastAction) => void>(() => {});
+export interface ToastOptions { tone?: "celebrate" }
+const ToastCtx = createContext<(msg: string, action?: ToastAction, opts?: ToastOptions) => void>(() => {});
 export function ToastProvider({ children }: { children: ReactNode }) {
-  const [toast, setToast] = useState<{ msg: string; action?: ToastAction } | null>(null);
+  const [toast, setToast] = useState<{ msg: string; action?: ToastAction; tone?: ToastOptions["tone"]; key: number } | null>(null);
   const timer = useRef<number | undefined>(undefined);
-  const show = useCallback((msg: string, action?: ToastAction) => {
-    setToast({ msg, action });
+  const show = useCallback((msg: string, action?: ToastAction, opts?: ToastOptions) => {
+    setToast({ msg, action, tone: opts?.tone, key: Date.now() });
     window.clearTimeout(timer.current);
-    timer.current = window.setTimeout(() => setToast(null), action ? 4500 : 2800);
+    timer.current = window.setTimeout(() => setToast(null), opts?.tone === "celebrate" ? 5000 : action ? 4500 : 2800);
   }, []);
   return (
     <ToastCtx.Provider value={show}>
       {children}
       <AnimatePresence>
         {toast && (
-          <motion.div className="snackbar" initial={{ opacity: 0, y: 16, x: "-50%", scale: 0.96 }} animate={{ opacity: 1, y: 0, x: "-50%", scale: 1 }} exit={{ opacity: 0, y: 10, x: "-50%", scale: 0.98 }} transition={spring}>
+          <motion.div key={toast.key} className={cx("snackbar", toast.tone && `snackbar-${toast.tone}`)} onClick={() => toast.tone && setToast(null)} initial={{ opacity: 0, y: 16, x: "-50%", scale: 0.96 }} animate={{ opacity: 1, y: 0, x: "-50%", scale: 1 }} exit={{ opacity: 0, y: 10, x: "-50%", scale: 0.98 }} transition={spring}>
+            {toast.tone === "celebrate" && <Sparkles size={18} style={{ flexShrink: 0 }} />}
             <span>{toast.msg}</span>
             {toast.action && (
               <button className="snackbar-action" onClick={() => { toast.action!.onClick(); window.clearTimeout(timer.current); setToast(null); }}>

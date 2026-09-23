@@ -14,7 +14,7 @@ import { ItemRow } from "../components/ItemCard";
 import { useSessionStore } from "../components/SessionBar";
 import { Dots, Empty, ErrorState, Page, Pill, Rise, Skeleton, easeOut, spring, stagger, useToast } from "../components/ui";
 
-export function useCoach(enabled: boolean, validIds?: Set<string>) {
+export function useCoach(enabled: boolean, validIds?: Set<string>, today?: { minutes: number; streak: number }) {
   const [cached, setCached] = useState<CoachResult | null | undefined>(undefined);
   useEffect(() => { getPref<CoachResult | null>("coach", null).then(setCached); }, []);
   // Cached purely by time otherwise — if the item the coach was talking about gets deleted,
@@ -22,11 +22,13 @@ export function useCoach(enabled: boolean, validIds?: Set<string>) {
   // "Up next" for however long is left on the TTL (caught live: up to 6 hours).
   const pickGone = !!cached?.pick_item_id && !!validIds && !validIds.has(cached.pick_item_id);
   // Results cached before the coach planned follow-ups have no next_item_ids — refresh those.
-  const stale = !cached || pickGone || !("next_item_ids" in cached) || Date.now() - (cached.fetched_at ?? 0) > COACH_TTL_MS;
+  // Also stale on a new day: yesterday's "today" advice is wrong by definition.
+  const newDay = !!cached?.fetched_at && new Date(cached.fetched_at).toDateString() !== new Date().toDateString();
+  const stale = !cached || pickGone || newDay || !("next_item_ids" in cached) || Date.now() - (cached.fetched_at ?? 0) > COACH_TTL_MS;
   const q = useQuery({
     queryKey: ["coach"],
     // Passing the last pick lets the coach rotate instead of repeating the same item for days.
-    queryFn: async () => { const c = await fetchCoach(undefined, cached?.pick_item_id); await setPref("coach", c); return c; },
+    queryFn: async () => { const c = await fetchCoach({ previousPickId: cached?.pick_item_id, todayMinutes: today?.minutes, streak: today?.streak }); await setPref("coach", c); return c; },
     enabled: enabled && cached !== undefined && stale,
     staleTime: COACH_TTL_MS,
     retry: 1,
@@ -50,7 +52,8 @@ export function HomeScreen() {
 
   const pending = useMemo(() => (items.data ?? []).filter((i) => i.status === "inbox" || i.status === "queued" || i.status === "in_progress"), [items.data]);
   const pendingIds = useMemo(() => new Set(pending.map((i) => i.id)), [pending]);
-  const { coach, refresh, loading: coachLoading } = useCoach(pending.length > 0, pendingIds);
+  const { coach, refresh, loading: coachLoading } = useCoach(pending.length > 0, pendingIds,
+    activity.data ? { minutes: todayMinutes(activity.data), streak: streak(activity.data, breakDaySet(profile.data?.settings)).current } : undefined);
   const pick: Item | null = useMemo(() => {
     const fromCoach = coach?.pick_item_id ? pending.find((i) => i.id === coach.pick_item_id) : null;
     return fromCoach ?? heuristicPick(items.data ?? []);

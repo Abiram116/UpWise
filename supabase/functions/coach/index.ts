@@ -28,6 +28,9 @@ Deno.serve(async (req) => {
     const availableMinutes: number | null = body.available_minutes ?? null;
     const localHour: number | null = body.local_hour ?? null;
     const previousPick: string | null = body.previous_pick_id ?? null;
+    const todayMin: number | null = body.today_minutes ?? null;
+    const streakDays: number | null = body.streak ?? null;
+    const weekday: string | null = body.weekday ?? null;
 
     const since = new Date(Date.now() - 28 * 86400e3).toISOString().slice(0, 10);
     const [profile, items, activity, lastSession, recentCompleted] = await Promise.all([
@@ -97,6 +100,9 @@ If backlog is empty, headline/message should encourage saving something useful i
       `Last 28 days: ${minutes28} min learned across ${activeDays} active days, ${completed28} completed, ${added28} saved.`,
       shortestMinutes != null ? `SHORTEST_AVAILABLE_MIN: ${shortestMinutes}` : "",
       previousPick ? `PREVIOUS_PICK: ${previousPick}` : "",
+      todayMin != null ? `TODAY SO FAR: ${todayMin} of ${profile.data?.daily_target_minutes ?? 30} min${todayMin >= (profile.data?.daily_target_minutes ?? 30) ? " — goal already met, suggest something optional or light, and acknowledge it" : ""}.` : "",
+      streakDays ? `STREAK: ${streakDays} days — mention it only if it's motivating right now.` : "",
+      weekday ? `DAY: ${weekday}${localHour != null && localHour >= 21 ? " (late — keep it short and light)" : ""}.` : "",
       `BACKLOG (id | status | category | relevance | est | age | title):\n${list.join("\n") || "(empty)"}`,
     ].filter(Boolean).join("\n\n");
 

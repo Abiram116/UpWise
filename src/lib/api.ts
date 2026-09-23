@@ -251,9 +251,12 @@ export async function setItemStatus(itemId: string, status: ItemStatus): Promise
 }
 
 // ---------- coach ----------
-export async function fetchCoach(availableMinutes?: number, previousPickId?: string | null): Promise<CoachResult> {
+export async function fetchCoach(ctx: { previousPickId?: string | null; todayMinutes?: number; streak?: number } = {}): Promise<CoachResult> {
   const res = await supabase.functions.invoke("coach", {
-    body: { available_minutes: availableMinutes ?? null, local_hour: new Date().getHours(), previous_pick_id: previousPickId ?? null },
+    body: {
+      local_hour: new Date().getHours(), weekday: new Date().toLocaleDateString("en", { weekday: "long" }),
+      previous_pick_id: ctx.previousPickId ?? null, today_minutes: ctx.todayMinutes ?? null, streak: ctx.streak ?? null,
+    },
   });
   if (res.error) throw res.error;
   return { ...(res.data as CoachResult), fetched_at: Date.now() };
