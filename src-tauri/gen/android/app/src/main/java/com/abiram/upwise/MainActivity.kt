@@ -16,6 +16,7 @@ import android.util.Log
 import android.view.HapticFeedbackConstants
 import android.webkit.JavascriptInterface
 import android.webkit.WebView
+import androidx.activity.OnBackPressedCallback
 import androidx.activity.enableEdgeToEdge
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
@@ -61,6 +62,20 @@ class MainActivity : TauriActivity() {
     // live: the status-bar scrim and the PIN screen's keyboard handling both silently did
     // nothing) — read real inset pixel values natively and push them to the page directly
     // instead of trusting the WebView to report them itself.
+    // TauriActivity leaves back unhandled, so by default it finishes the activity from any
+    // screen. Ask the page first (close a sheet, go up a level); if it has nothing left to
+    // do, background the app the way every Android app does from its start screen instead
+    // of killing it — reopening is then instant and keeps your place.
+    onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
+      override fun handleOnBackPressed() {
+        val view = webView
+        if (view == null) { moveTaskToBack(true); return }
+        view.evaluateJavascript("(function(){try{return !!(window.__upwiseBack&&window.__upwiseBack())}catch(e){return false}})()") { handled ->
+          if (handled != "true") moveTaskToBack(true)
+        }
+      }
+    })
+
     ViewCompat.setOnApplyWindowInsetsListener(window.decorView) { _, insets ->
       val density = resources.displayMetrics.density
       val statusBar = insets.getInsets(WindowInsetsCompat.Type.statusBars()).top / density
@@ -98,7 +113,22 @@ class MainActivity : TauriActivity() {
     @JavascriptInterface
     fun setLightStatusBar(light: Boolean) {
       handler.post {
-        WindowInsetsControllerCompat(window, window.decorView).isAppearanceLightStatusBars = light
+        val c = WindowInsetsControllerCompat(window, window.decorView)
+        c.isAppearanceLightStatusBars = light
+        c.isAppearanceLightNavigationBars = light
+      }
+    }
+
+    // Deep-links to this app's notification settings — once a permission request has been
+    // denied, Android won't show the dialog again, so this is the only way back.
+    @JavascriptInterface
+    fun openNotificationSettings() {
+      handler.post {
+        try {
+          startActivity(Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS).putExtra(Settings.EXTRA_APP_PACKAGE, packageName))
+        } catch (e: Exception) {
+          Log.e("UpWise", "openNotificationSettings failed", e)
+        }
       }
     }
 

@@ -1,10 +1,12 @@
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { useNavigate } from "react-router";
 import { AnimatePresence, motion } from "motion/react";
-import { AlertCircle, ArrowRight, Play, WifiOff } from "lucide-react";
+import { AlertCircle, ArrowRight, CloudOff, Play } from "lucide-react";
 import { useAnalyze, useCategories, useProfile, useSetStatus, useUpdateItem, type AnalyzeStage } from "../lib/api";
 import { extractUrl, fmtMinutes, detectSource, SOURCE_LABEL } from "../lib/utils";
-import { looksOffline, queueOfflineSave } from "../lib/offlineQueue";
+import { enqueue } from "../lib/outbox";
+import { connection } from "../lib/connection";
+import { describeError, isNetworkError } from "../lib/errors";
 import type { Item } from "../lib/types";
 import { Chip, CheckIcon, Dots, Pill, Sheet, easeOut, spring, useToast } from "./ui";
 import { useSessionStore } from "./SessionBar";
@@ -16,7 +18,7 @@ const listeners = new Set<() => void>();
 const queueStore = {
   push(url: string, via: "paste" | "share") { queued = { url, via, nonce: Date.now() }; listeners.forEach((l) => l()); },
   take() { const q = queued; queued = null; listeners.forEach((l) => l()); return q; },
-  subscribe(l: () => void) { listeners.add(l); return () => listeners.delete(l); },
+  subscribe(l: () => void) { listeners.add(l); return () => { listeners.delete(l); }; },
   get: () => queued,
 };
 export function useAddQueue<T>(sel: (s: typeof queueStore) => T): T { return sel(queueStore); }
@@ -34,7 +36,8 @@ export function AddSheet({ open, onClose }: { open: boolean; onClose: () => void
   const [stage, setStage] = useState<AnalyzeStage | null>(null);
   const [result, setResult] = useState<{ item: Item; duplicate: boolean; ai_error: string | null } | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [queuedOffline, setQueuedOffline] = useState(false);
+  // Why a save was parked in the outbox instead of analyzed now — drives the confirmation copy.
+  const [queuedOffline, setQueuedOffline] = useState<false | "offline" | "backend">(false);
   const analyze = useAnalyze();
   const inputRef = useRef<HTMLInputElement>(null);
   const toast = useToast();
@@ -49,7 +52,16 @@ export function AddSheet({ open, onClose }: { open: boolean; onClose: () => void
 
   const run = async (u: string, via: "paste" | "share" = "paste") => {
     const runId = ++activeRunId.current;
-    setError(null); setResult(null); setQueuedOffline(false); setStage("metadata");
+    setError(null); setResult(null); setQueuedOffline(false);
+    const park = async () => {
+      await enqueue({ kind: "save", url: u, note: note.trim() || undefined, via });
+      const why = connection.get() === "backend" ? "backend" : "offline";
+      if (dismissedRuns.current.has(runId)) toast("Saved for later — it'll be analyzed once UpWise reconnects");
+      else setQueuedOffline(why);
+    };
+    // Already known to be unreachable: don't make you watch a spinner time out first.
+    if (connection.get() !== "ok") { await park(); return; }
+    setStage("metadata");
     try {
       const r = await analyze.mutateAsync([u, {
         note: note.trim() || undefined, addedVia: via,
@@ -61,13 +73,14 @@ export function AddSheet({ open, onClose }: { open: boolean; onClose: () => void
         setResult(r);
       }
     } catch (e) {
-      const message = (e as Error).message || "Something went wrong";
-      if (looksOffline(message)) {
-        await queueOfflineSave({ url: u, note: note.trim() || undefined, via });
-        if (dismissedRuns.current.has(runId)) toast("No connection — saved to sync automatically");
-        else setQueuedOffline(true);
-      } else if (dismissedRuns.current.has(runId)) toast(`Couldn't save that link: ${message}`);
-      else setError(message);
+      if (isNetworkError(e)) {
+        connection.reportError(e);
+        await park();
+      } else {
+        const message = describeError(e).message;
+        if (dismissedRuns.current.has(runId)) toast(`Couldn't save that link — ${message}`);
+        else setError(message);
+      }
     } finally {
       dismissedRuns.current.delete(runId);
       if (activeRunId.current === runId) setStage(null);
@@ -101,10 +114,12 @@ export function AddSheet({ open, onClose }: { open: boolean; onClose: () => void
         {queuedOffline && (
           <motion.div key="queued" className="col" style={{ gap: 14, alignItems: "center", textAlign: "center", padding: "8px 0" }}
             initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} transition={spring}>
-            <div className="thumb" data-tone="sage" style={{ width: 56, aspectRatio: "1", borderRadius: 999 }}><WifiOff size={24} /></div>
+            <div className="thumb" data-tone="sage" style={{ width: 56, aspectRatio: "1", borderRadius: 999 }}><CloudOff size={24} /></div>
             <div>
-              <h3 className="headline-sm">No connection</h3>
-              <p className="body" style={{ marginTop: 6 }}>Saved for later — it'll analyze itself the moment you're back online.</p>
+              <h3 className="headline-sm">{queuedOffline === "backend" ? "Database unreachable" : "No connection"}</h3>
+              <p className="body" style={{ marginTop: 6 }}>
+                Saved for later — it'll be analyzed and added to your library as soon as {queuedOffline === "backend" ? "Supabase is back" : "you're back online"}.
+              </p>
             </div>
             <Pill variant="filled" size="lg" style={{ width: "100%" }} onClick={close}>Got it</Pill>
           </motion.div>

@@ -38,7 +38,8 @@ export function StatsScreen() {
     };
   }, [activity.data, items.data, sessions.data, profile.data]);
 
-  if (activity.isError || items.isError) return <Page><h1 className="display">Progress</h1><ErrorState message={(activity.error ?? items.error)?.message ?? ""} onRetry={() => { activity.refetch(); items.refetch(); }} /></Page>;
+  const failed = !data && [activity, items, sessions].find((q) => q.isError && !q.data);
+  if (failed) return <Page><h1 className="display">Progress</h1><ErrorState error={failed.error} onRetry={() => { void activity.refetch(); void items.refetch(); void sessions.refetch(); }} /></Page>;
   if (!data) return <Page><h1 className="display">Progress</h1><Skeleton h={120} r={28} /><Skeleton h={160} r={28} /></Page>;
 
   const maxMin = Math.max(1, ...data.weeks.map((w) => w.minutes));

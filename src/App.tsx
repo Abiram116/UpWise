@@ -1,15 +1,17 @@
 import { lazy, Suspense, useEffect, useRef, useState } from "react";
 import { HashRouter, Route, Routes, useNavigate } from "react-router";
-import { AlertTriangle } from "lucide-react";
 import { useAuth } from "./hooks/useAuth";
 import { useActivity, useItems, useProfile, useSessions, useSetStatus, markNotificationOpened } from "./lib/api";
 import { replanNotifications, snoozeNotification } from "./lib/notifications";
 import { installShareBridge } from "./lib/share";
 import { isTauri } from "./lib/platform";
 import { getPref, setPref } from "./lib/store";
-import { processOfflineQueue } from "./lib/offlineQueue";
+import { flushOutbox } from "./lib/outbox";
+import { connection } from "./lib/connection";
+import { describeError, isNetworkError } from "./lib/errors";
+import { pluralize } from "./lib/utils";
 import { useQueryClient } from "@tanstack/react-query";
-import { useToast } from "./components/ui";
+import { ErrorState, useToast } from "./components/ui";
 import { AppShell } from "./components/AppShell";
 import { WindowControls } from "./components/WindowControls";
 import { Spinner } from "./components/ui";
@@ -38,7 +40,7 @@ export default function App() {
 const ONBOARDED_KEY = "upwise:onboarded";
 
 function Gate() {
-  const { session, loading, error, needsPin } = useAuth();
+  const { session, loading, configError, needsPin } = useAuth();
   const profile = useProfile(!!session);
   // Read synchronously (not via the async Tauri store) so a returning user's app shell can
   // paint on the very first render instead of waiting on a network profile fetch every cold start.
@@ -51,21 +53,21 @@ function Gate() {
 
   if (loading) return <Center><Spinner size={26} /></Center>;
   if (needsPin) return <Suspense fallback={<Center><Spinner size={26} /></Center>}><PinGate /></Suspense>;
-  if (error || !session) {
+  if (configError) {
     return (
       <Center>
-        <AlertTriangle size={28} style={{ color: "var(--warm)" }} />
-        <h3 className="headline-sm">Couldn't connect</h3>
-        <p className="meta selectable" style={{ maxWidth: 360, textAlign: "center" }}>{error ?? "No session"}</p>
+        <h1 className="headline-sm">UpWise isn't set up</h1>
+        <p className="body" style={{ maxWidth: 380, textAlign: "center", color: "var(--on-surface-2)" }}>{configError}</p>
       </Center>
     );
   }
+  if (!session) return <Center><Spinner size={26} /></Center>;
 
   const knownOnboarded = cachedOnboarded || profile.data?.onboarded === true;
   if (!knownOnboarded) {
     // No cached fast-path yet (first launch ever) — genuinely need the profile to decide.
     if (profile.isLoading) return <Center><Spinner size={26} /></Center>;
-    if (profile.error) return <Center><p className="meta">{profile.error.message}</p></Center>;
+    if (profile.error) return <Center><div style={{ maxWidth: 420 }}><ErrorState error={profile.error} onRetry={() => profile.refetch()} /></div></Center>;
     if (!profile.data?.onboarded) return <><WindowControls /><Suspense fallback={<Center><Spinner size={26} /></Center>}><Onboarding /></Suspense></>;
   }
 
@@ -73,6 +75,7 @@ function Gate() {
     <WhatsNewGate>
       <WindowControls />
       <Background />
+      <GlobalErrors />
       <Routes>
         <Route element={<AppShell />}>
           <Route path="/" element={<HomeScreen />} />
@@ -98,21 +101,20 @@ function Background() {
   const qc = useQueryClient();
   const toast = useToast();
 
-  // A link shared with no signal gets queued instead of just failing (AddSheet handles the
-  // queueing itself) — this is the other half: actually retry the queue once connectivity's
-  // back, on startup and whenever the device comes back online.
+  // Writes made offline / while the database was paused sit in the outbox — replay them on
+  // startup and every time the connection comes back, then refresh what they touched.
   useEffect(() => {
     const flush = async () => {
-      const { ok } = await processOfflineQueue();
-      if (ok > 0) {
-        qc.invalidateQueries({ queryKey: ["items"] });
-        qc.invalidateQueries({ queryKey: ["categories"] });
-        toast(`Synced ${ok} saved link${ok === 1 ? "" : "s"}`);
-      }
+      const r = await flushOutbox();
+      if (!r.done && !r.failed) return;
+      for (const key of ["items", "categories", "activity", "sessions", "profile"]) void qc.invalidateQueries({ queryKey: [key] });
+      if (r.failed) toast(`${pluralize(r.failed, "offline change")} couldn't be applied and ${r.failed === 1 ? "was" : "were"} skipped`);
+      else if (r.saved) toast(`Synced — ${pluralize(r.saved, "saved link")} analyzed`);
+      else toast(`Synced ${pluralize(r.done, "offline change")}`);
     };
     void flush();
-    window.addEventListener("online", flush);
-    return () => window.removeEventListener("online", flush);
+    // On reconnect, pull fresh data as well — anything on screen may be days old.
+    return connection.onReconnect(() => { void flush(); void qc.invalidateQueries(); });
   }, [qc, toast]);
   // Persisted (survives cold starts, unlike a ref) so reopening the app the same day never
   // re-plans. Settings changes replan directly via their own save handler, independent of this.
@@ -167,6 +169,21 @@ function Background() {
     return () => off?.();
   }, [nav, setStatus]);
 
+  return null;
+}
+
+/** Last line of defence: a failed promise nobody caught becomes a readable toast instead of
+ * silently doing nothing. Connectivity failures are the banner's job, not a toast's. */
+function GlobalErrors() {
+  const toast = useToast();
+  useEffect(() => {
+    const onRejection = (e: PromiseRejectionEvent) => {
+      if (isNetworkError(e.reason)) { connection.reportError(e.reason); return; }
+      toast(describeError(e.reason).message);
+    };
+    window.addEventListener("unhandledrejection", onRejection);
+    return () => window.removeEventListener("unhandledrejection", onRejection);
+  }, [toast]);
   return null;
 }
 

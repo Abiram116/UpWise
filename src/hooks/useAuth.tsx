@@ -1,8 +1,9 @@
-import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from "react";
+import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from "react";
 import type { Session } from "@supabase/supabase-js";
-import { supabase } from "../lib/supabase";
+import { storedSession, supabase } from "../lib/supabase";
 import { derivePassword } from "../lib/pin";
 import { currentVersion } from "../lib/updater";
+import { diagnoseConnection, isNetworkError } from "../lib/errors";
 
 // Single-user app, no visible login UI — but unlike a baked-in password, this never ships
 // a real credential in the bundle. First launch (or after signing out) asks for a PIN once;
@@ -26,11 +27,8 @@ function markActive(version: string) {
 
 function shouldRelock(version: string): boolean {
   try {
-    // This is only ever reached when a persisted session already exists (a true fresh
-    // install has none, and goes straight to needsPin instead) — so no prior baseline on
-    // this device is itself proof this build is the first to ever run here, i.e. an update
-    // just happened. Same bootstrapping mistake WhatsNewGate had; fixed the same way: treat
-    // "no baseline" as "needs to re-verify", not "skip it".
+    // Only reached when a persisted session already exists, so "no baseline on this device"
+    // means this build is the first to run here, i.e. an update just happened.
     const lastVersion = localStorage.getItem(LAST_VERSION_KEY);
     if (lastVersion !== version) return true;
     const lastAt = Number(localStorage.getItem(LAST_ACTIVE_KEY) ?? "0");
@@ -39,58 +37,97 @@ function shouldRelock(version: string): boolean {
   } catch { return false; }
 }
 
+export type UnlockResult = "ok" | "wrong" | "offline" | "backend" | "limited";
+
 interface AuthCtx {
   session: Session | null;
   loading: boolean;
-  error: string | null;
+  /** Only set for a broken build (missing config) — nothing the user can fix at runtime. */
+  configError: string | null;
   needsPin: boolean;
   name: string;
-  unlock: (pin: string) => Promise<boolean>;
+  unlock: (pin: string) => Promise<UnlockResult>;
 }
 const Ctx = createContext<AuthCtx | null>(null);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [session, setSession] = useState<Session | null>(null);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const [configError, setConfigError] = useState<string | null>(null);
   const [needsPin, setNeedsPin] = useState(false);
+  // Auth events that arrive while locked (INITIAL_SESSION, a background TOKEN_REFRESHED) must
+  // not hand the session over — that used to skip the PIN screen right after an update.
+  const locked = useRef(true);
 
   useEffect(() => {
     let cancelled = false;
     (async () => {
       try {
-        if (!EMAIL) throw new Error("Add VITE_APP_EMAIL to .env, then rebuild.");
+        if (!EMAIL) throw new Error("This build is missing its account setting (VITE_APP_EMAIL). Rebuild with it in .env.");
         const version = await currentVersion();
-        const { data } = await supabase.auth.getSession();
+        const { data, error } = await supabase.auth.getSession();
         if (cancelled) return;
-        if (data.session && !shouldRelock(version)) {
-          setSession(data.session);
+        // Expired access token + no signal: the session is still good, it just can't be
+        // refreshed yet. Use the stored one; supabase-js refreshes it once you're online.
+        const offline = !!error && isNetworkError(error);
+        const current = data.session ?? (offline ? storedSession() : null);
+        if (!current) { setNeedsPin(true); return; }
+        if (!shouldRelock(version)) {
+          locked.current = false;
+          setSession(current);
           markActive(version);
+        } else if (offline || !navigator.onLine) {
+          // The PIN can only be checked by the server. Rather than locking you out of your
+          // own library with no signal, let this launch through and ask next time you're
+          // online (lastActive isn't bumped, so the relock is still due).
+          locked.current = false;
+          setSession(current);
         } else {
           setNeedsPin(true);
         }
       } catch (e) {
-        if (!cancelled) setError((e as Error).message);
+        if (!cancelled) setConfigError((e as Error).message);
       } finally {
         if (!cancelled) setLoading(false);
       }
     })();
-    const { data: sub } = supabase.auth.onAuthStateChange((_e, s) => { if (s) { setSession(s); setNeedsPin(false); } });
+    const { data: sub } = supabase.auth.onAuthStateChange((event, s) => {
+      if (event === "SIGNED_OUT") {
+        // Refresh token revoked/expired server-side — the only way back in is the PIN.
+        locked.current = true;
+        setSession(null);
+        setNeedsPin(true);
+        return;
+      }
+      if (s && !locked.current) setSession(s);
+    });
     return () => { cancelled = true; sub.subscription.unsubscribe(); };
   }, []);
 
-  const unlock = useCallback(async (pin: string): Promise<boolean> => {
-    if (!EMAIL) return false;
+  const unlock = useCallback(async (pin: string): Promise<UnlockResult> => {
+    if (!EMAIL) return "wrong";
     const password = await derivePassword(pin);
-    const { data, error: signInError } = await supabase.auth.signInWithPassword({ email: EMAIL, password });
-    if (signInError || !data.session) return false;
-    setSession(data.session);
-    setNeedsPin(false);
-    void currentVersion().then(markActive);
-    return true;
+    try {
+      const { data, error } = await supabase.auth.signInWithPassword({ email: EMAIL, password });
+      if (error) {
+        if (error.status === 429) return "limited";
+        if (isNetworkError(error)) { const s = await diagnoseConnection(); return s === "ok" ? "backend" : s; }
+        return "wrong";
+      }
+      if (!data.session) return "wrong";
+      locked.current = false;
+      setSession(data.session);
+      setNeedsPin(false);
+      void currentVersion().then(markActive);
+      return "ok";
+    } catch (e) {
+      if (!isNetworkError(e)) return "wrong";
+      const s = await diagnoseConnection();
+      return s === "ok" ? "backend" : s;
+    }
   }, []);
 
-  return <Ctx.Provider value={{ session, loading, error, needsPin, name: NAME, unlock }}>{children}</Ctx.Provider>;
+  return <Ctx.Provider value={{ session, loading, configError, needsPin, name: NAME, unlock }}>{children}</Ctx.Provider>;
 }
 
 export function useAuth(): AuthCtx {

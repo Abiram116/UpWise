@@ -1,9 +1,11 @@
 import { useEffect, useRef, useState } from "react";
 import { motion } from "motion/react";
-import { useAuth } from "../hooks/useAuth";
+import { useAuth, type UnlockResult } from "../hooks/useAuth";
+import { BACKEND_DOWN, SUPABASE_DASHBOARD_URL } from "../lib/errors";
+import { openExternal } from "../lib/links";
 import { PIN_LENGTH } from "../lib/pin";
 import { BrandMark } from "../components/BrandMark";
-import { Spinner, easeOut, spring } from "../components/ui";
+import { Pill, Spinner, easeOut, spring } from "../components/ui";
 import { haptic } from "../lib/haptics";
 
 const wordsIn = { hidden: {}, show: { transition: { staggerChildren: 0.03, delayChildren: 0 } } };
@@ -14,6 +16,8 @@ export function PinGate() {
   const [pin, setPin] = useState("");
   const [busy, setBusy] = useState(false);
   const [shake, setShake] = useState(0);
+  // Why the last attempt didn't get in, when it wasn't simply the wrong PIN.
+  const [problem, setProblem] = useState<Exclude<UnlockResult, "ok" | "wrong"> | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => { inputRef.current?.focus(); }, []);
@@ -23,17 +27,17 @@ export function PinGate() {
     let cancelled = false;
     (async () => {
       setBusy(true);
-      const ok = await unlock(pin);
+      setProblem(null);
+      const result = await unlock(pin);
       if (cancelled) return;
       setBusy(false);
-      if (ok) {
-        haptic.success();
-      } else {
-        haptic.warn();
-        setPin("");
-        setShake((s) => s + 1);
-        inputRef.current?.focus();
-      }
+      if (result === "ok") { haptic.success(); return; }
+      haptic.warn();
+      setPin("");
+      // Only a wrong PIN shakes — "no internet" isn't your mistake and shouldn't look like one.
+      if (result === "wrong") setShake((s) => s + 1);
+      else setProblem(result);
+      inputRef.current?.focus();
     })();
     return () => { cancelled = true; };
   }, [pin, busy, unlock]);
@@ -75,8 +79,17 @@ export function PinGate() {
           })}
         </motion.button>
 
-        <div style={{ height: 24, display: "flex", alignItems: "center", justifyContent: "center" }}>
-          {busy && <Spinner size={20} />}
+        <div style={{ minHeight: 24, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 10 }}>
+          {busy ? <Spinner size={20} /> : problem && (
+            <motion.div className="col" style={{ gap: 10, alignItems: "center", maxWidth: 340 }} initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} transition={easeOut} role="alert">
+              <p className="body" style={{ color: "var(--on-surface-2)" }}>
+                {problem === "offline" ? "You're offline. Your PIN is checked by the server, so connect to the internet and try again."
+                  : problem === "limited" ? "Too many tries in a row. Wait a minute, then try again."
+                  : BACKEND_DOWN.message}
+              </p>
+              {problem === "backend" && <Pill variant="tonal" size="sm" onClick={() => void openExternal(SUPABASE_DASHBOARD_URL)}>Open Supabase</Pill>}
+            </motion.div>
+          )}
         </div>
 
         <input

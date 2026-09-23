@@ -95,6 +95,18 @@ Living backlog of things to build next. Nothing here is built yet — this is th
 - [x] **Resume from timestamp.** Segments were already tappable and jumped to the right point in the video — what was missing was remembering which one you'd last used. Now persists the last-tapped segment per item (device-local) and highlights it "Resume here" next time, instead of a fully separate feature.
 - [x] **Catch near-duplicate saves.** Server-side Jaccard similarity on normalized title words (plus a channel/duration sanity check) runs at save-time against the existing library — a strong match surfaces immediately in the save sheet ("This looks similar to X, already in your library") with a one-tap "Skip this one" instead of silently becoming a second copy. Verified live against a seeded near-duplicate title.
 
+### Hardening pass (v0.8.0)
+
+- [x] **One error translator.** `src/lib/errors.ts` — every error the user can see goes through `describeError`; raw Postgres/fetch/stack text never reaches the screen. Tells "offline" from "Supabase not answering" (`diagnoseConnection`: auth health check, then an internet probe) so a paused free-tier project gets its own explanation plus a direct "Open Supabase" link.
+- [x] **Connection banner.** `src/lib/connection.ts` is fed by every query/mutation result and online/offline events; `ConnectionBanner` is the only place connectivity is talked about — a quiet line when offline, a warm slab when the database is paused (polls every 30s until it's back).
+- [x] **Offline-first reads.** React Query cache persisted to disk (14 days) — the app opens straight into your library with no signal or a paused DB. Screens are data-first: cached data always wins over an error.
+- [x] **Outbox for writes.** `src/lib/outbox.ts` replaces the link-only offline queue: status changes, notes, categories, deletes, sessions, logged minutes, profile/settings and link saves all apply optimistically and replay in order on reconnect. Session rows use client ids + upsert so replays can't double-count.
+- [x] **Lean list payload.** Items list no longer downloads transcripts (up to 60KB each); the detail screen fetches one on demand and Library searches transcripts server-side.
+- [x] **Real bugs:** `auth.getUser()` network calls made every offline write crash; stopping a session offline lost the time; auth events could skip the relock PIN screen; the PIN screen said "wrong PIN" when it was really "no internet"; update check said "up to date" when GitHub rate-limited; ErrorBoundary showed a raw stack.
+- [x] **Android rules:** back gesture closes sheets/overlays first, then goes up a level, and from Today backgrounds the app instead of killing it; tabs no longer stack history; nav-bar icon contrast follows the theme; denied notification permission offers a jump to system settings; proper monochrome status-bar notification icon (`ic_stat_upwise`).
+- [x] **Windows:** window starts hidden and appears after first paint (no white flash), with a Rust fallback so it can never stay invisible.
+- Relock when offline is deferred to the next online launch — the PIN can only be verified by the server, and locking you out of your own cached library with no signal is worse.
+
 ## 9. Docs
 
 - [x] **README rewrite.** Done: leads with the actual Telegram link-hoarding story instead of a feature dump, two custom SVG illustrations (`readme-assets/hero.svg`, `readme-assets/flow.svg`) hand-drawn in the app's exact tonal palette (sage `#2f6a52`/`#cfe7da`, apricot `#9a5b2a`/`#f5dcc4`) and squircle/pill shape language, no stock icons. Setup/dev/release commands kept but pushed to the bottom; `VITE_APP_PASSWORD` reference removed from the secrets table (obsolete since the PIN gate change).

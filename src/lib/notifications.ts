@@ -1,6 +1,6 @@
 import {
   cancelAll, createChannel, Importance, isPermissionGranted, registerActionTypes, requestPermission,
-  Schedule, sendNotification, Visibility,
+  Schedule, sendNotification as send, Visibility, type Options,
 } from "@tauri-apps/plugin-notification";
 import { isAndroid, isMobile, isTauri } from "./platform";
 import { DEFAULT_NOTIFICATIONS } from "./config";
@@ -10,6 +10,12 @@ import { fmtMinutes, parseTime, pluralize } from "./utils";
 import type { CoachResult, DailyActivity, Item, LearningSession, NotificationSettings, Profile } from "./types";
 
 const CHANNEL = "upwise-nudges";
+
+// Android draws the status-bar icon as a flat white silhouette, so it needs its own
+// monochrome drawable (res/drawable/ic_stat_upwise.xml) — the launcher icon renders as a blob.
+function sendNotification(o: Options) {
+  send(isAndroid() ? { icon: "ic_stat_upwise", iconColor: "#2F6A52", ...o } : o);
+}
 let desktopTimers: number[] = [];
 // "Mark done" is deliberately NOT a quick action here: completing an item always asks for an
 // honest time estimate (see ItemDetail's FinishPromptSheet) - a one-tap background "done" from

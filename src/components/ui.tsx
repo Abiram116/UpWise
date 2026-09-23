@@ -3,6 +3,9 @@ import { createContext, useCallback, useContext, useEffect, useRef, useState, ty
 import { Check, X } from "lucide-react";
 import { cx } from "../lib/utils";
 import { haptic } from "../lib/haptics";
+import { describeError } from "../lib/errors";
+import { useConnection } from "../lib/connection";
+import { useBackHandler } from "../lib/backHandler";
 
 // ---------- motion presets ----------
 export const spring: Transition = { type: "spring", stiffness: 420, damping: 36, mass: 0.8 };
@@ -96,6 +99,7 @@ export function Segmented<T extends string>({ value, onChange, options }: { valu
 export function Sheet({ open, onClose, children, title }: { open: boolean; onClose: () => void; children: ReactNode; title?: string }) {
   const reduce = useReducedMotion();
   const isDesk = typeof window !== "undefined" && window.matchMedia("(min-width: 840px)").matches;
+  useBackHandler(open, onClose);
   useEffect(() => {
     if (!open) return;
     const onKey = (e: KeyboardEvent) => e.key === "Escape" && onClose();
@@ -177,12 +181,17 @@ export function Empty({ title, body, action }: { icon?: ReactNode; title: string
   );
 }
 
-export function ErrorState({ message, onRetry }: { message: string; onRetry?: () => void }) {
+/** Only for when there's nothing cached to show — otherwise screens render their data and
+ * the connection banner explains why it might be stale. */
+export function ErrorState({ error, onRetry }: { error: unknown; onRetry?: () => void }) {
+  const status = useConnection();
+  const f = describeError(error, status === "ok" ? undefined : status);
+  const message = f.kind === "offline" ? "This hasn't been loaded on this device yet. It'll show up as soon as you're back online." : f.message;
   return (
-    <div className="empty" style={{ color: "var(--error)" }}>
-      <h3 className="headline-sm" style={{ color: "var(--on-surface)" }}>Couldn't reach your library</h3>
-      <p className="body" style={{ maxWidth: 360 }}>{message}</p>
-      {onRetry && <Pill variant="tonal" onClick={onRetry} style={{ alignSelf: "flex-start", marginTop: 6 }}>Retry</Pill>}
+    <div className="empty">
+      <h3 className="headline-sm">{f.kind === "unknown" ? "Couldn't load this" : f.title}</h3>
+      <p className="body" style={{ maxWidth: 380 }}>{message}</p>
+      {onRetry && f.kind !== "offline" && <Pill variant="tonal" onClick={onRetry} style={{ alignSelf: "flex-start", marginTop: 6 }}>Try again</Pill>}
     </div>
   );
 }

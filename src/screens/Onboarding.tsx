@@ -4,7 +4,8 @@ import { useProfile, useUpdateProfile } from "../lib/api";
 import { ensurePermission, sendTestNotification } from "../lib/notifications";
 import { isAndroid, isTauri } from "../lib/platform";
 import { DEFAULT_NOTIFICATIONS } from "../lib/config";
-import { Chip, Pill, easeOut, spring } from "../components/ui";
+import { Chip, Pill, easeOut, spring, useToast } from "../components/ui";
+import { describeError } from "../lib/errors";
 import { BrandMark } from "../components/BrandMark";
 import "../lib/android-bridge";
 
@@ -45,11 +46,14 @@ export function Onboarding() {
     if (isAndroid() && window.AndroidNative?.canInstallPackages) setCanInstall(window.AndroidNative.canInstallPackages());
   }, []);
 
+  const toast = useToast();
   const finish = async () => {
-    await update.mutateAsync({
-      goal, interests, daily_target_minutes: target, onboarded: true,
-      settings: { ...DEFAULT_NOTIFICATIONS, enabled: notif !== false },
-    });
+    try {
+      await update.mutateAsync({
+        goal, interests, daily_target_minutes: target, onboarded: true,
+        settings: { ...DEFAULT_NOTIFICATIONS, enabled: notif !== false },
+      });
+    } catch (e) { toast(`Couldn't save your setup — ${describeError(e).message}`); }
   };
 
   const steps = [

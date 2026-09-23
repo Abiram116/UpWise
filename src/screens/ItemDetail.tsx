@@ -1,27 +1,26 @@
 import { useEffect, useState } from "react";
-import { useNavigate, useParams } from "react-router";
+import { useLocation, useNavigate, useParams } from "react-router";
 import { motion } from "motion/react";
-import { openUrl } from "@tauri-apps/plugin-opener";
 import { ArrowLeft, ArrowRight, Check, ChevronDown, ExternalLink, ListPlus, Play, RefreshCw, SkipForward, Trash2, Clock } from "lucide-react";
-import { logManualMinutes, useAnalyze, useCategories, useDeleteItemWithUndo, useItem, useSetStatus, useUpdateItem } from "../lib/api";
-import { isDesktop, isTauri } from "../lib/platform";
+import { logManualMinutes, useAnalyze, useCategories, useDeleteItemWithUndo, useItem, useItemTranscript, useSetStatus, useUpdateItem } from "../lib/api";
+import { isDesktop } from "../lib/platform";
+import { openExternal as open } from "../lib/links";
+import { describeError, isNetworkError } from "../lib/errors";
 import { confidence, fmtDuration, fmtMinutes, relativeTime, STATUS_LABEL } from "../lib/utils";
 import { haptic } from "../lib/haptics";
 import { getPref, setPref } from "../lib/store";
 import { useActiveSession, useSessionStore } from "../components/SessionBar";
-import { Chip, Dots, Page, Pill, Rise, Sheet, Skeleton, spring, useToast } from "../components/ui";
+import { Chip, Dots, Empty, ErrorState, Page, Pill, Rise, Sheet, Skeleton, Spinner, spring, useToast } from "../components/ui";
 import { useQueryClient } from "@tanstack/react-query";
-
-async function open(url: string) {
-  if (isTauri) await openUrl(url); else window.open(url, "_blank");
-}
 
 export function ItemDetailScreen() {
   const { id } = useParams();
   const nav = useNavigate();
+  const loc = useLocation();
   const toast = useToast();
   const qc = useQueryClient();
-  const { data: item, isLoading } = useItem(id);
+  const items = useItem(id);
+  const item = items.data;
   const setStatus = useSetStatus();
   const update = useUpdateItem();
   const del = useDeleteItemWithUndo();
@@ -36,14 +35,25 @@ export function ItemDetailScreen() {
   const [finishPromptOpen, setFinishPromptOpen] = useState(false);
   const [confirmDel, setConfirmDel] = useState(false);
   const [lastSegment, setLastSegment] = useState<number | null>(null);
+  const transcript = useItemTranscript(id, showTranscript);
+  // Opened straight from a notification there's no in-app history to go back to.
+  const back = () => (loc.key === "default" ? nav("/", { replace: true }) : nav(-1));
+  const fail = (what: string) => (e: unknown) => toast(`${what} — ${describeError(e).message}`);
 
   useEffect(() => {
     if (!id) return;
     getPref<number | null>(`lastSegment:${id}`, null).then(setLastSegment);
   }, [id]);
 
-  if (isLoading) return <Page><Skeleton h={220} r={28} /><Skeleton h={30} w="70%" /><Skeleton h={80} /></Page>;
-  if (!item) return <Page><p className="body">Not found.</p></Page>;
+  if (items.isPending) return <Page><Skeleton h={220} r={28} /><Skeleton h={30} w="70%" /><Skeleton h={80} /></Page>;
+  if (!item && items.isError) return <Page><ErrorState error={items.error} onRetry={() => items.refetch()} /></Page>;
+  if (!item) {
+    return (
+      <Page>
+        <Empty title="This item is gone" body="It was deleted, maybe on another device." action={<Pill variant="tonal" onClick={() => nav("/library", { replace: true })} style={{ alignSelf: "flex-start" }}>Go to Library</Pill>} />
+      </Page>
+    );
+  }
 
   const ai = item.ai ?? {};
   const isActive = active?.itemId === item.id;
@@ -56,15 +66,16 @@ export function ItemDetailScreen() {
   // end up saying "2 things learned, 1 min invested" — so it goes through FinishPromptSheet
   // instead, which asks for an honest minute estimate before marking complete.
   const finish = async () => {
-    if (isActive) { await stop(true); qc.invalidateQueries({ queryKey: ["activity"] }); toast("Marked as learned"); }
-    else setFinishPromptOpen(true);
+    if (!isActive) { setFinishPromptOpen(true); return; }
+    try { await stop(true); haptic.success(); toast("Marked as learned"); }
+    catch (e) { fail("Couldn't finish")(e); }
   };
 
   return (
     <Page>
       <Rise>
         <div className="row between">
-          <Pill variant="text" size="sm" onClick={() => nav(-1)} style={{ marginLeft: -14 }}><ArrowLeft size={18} /> Back</Pill>
+          <Pill variant="text" size="sm" onClick={back} style={{ marginLeft: -14 }}><ArrowLeft size={18} /> Back</Pill>
           <div className="row" style={{ gap: 6 }}>
             {trust && <Chip tone={trust.tone}>{trust.label}</Chip>}
             <Chip tone={done ? "primary" : undefined}>{STATUS_LABEL[item.status]}</Chip>
@@ -102,14 +113,14 @@ export function ItemDetailScreen() {
           <div className="row" style={{ gap: 8 }}>
             {!done && (isActive
               ? <Pill variant="filled" size="lg" className="grow" onClick={finish}><Check size={18} strokeWidth={2.5} /> Done learning</Pill>
-              : <Pill variant="filled" size="lg" className="grow" onClick={async () => { await start(item); if (!embed) void open(item.url); }}><Play size={18} fill="currentColor" /> Start</Pill>)}
+              : <Pill variant="filled" size="lg" className="grow" onClick={async () => { try { await start(item); if (!embed) void open(item.url); } catch (e) { fail("Couldn't start")(e); } }}><Play size={18} fill="currentColor" /> Start</Pill>)}
             <Pill variant="tonal" size="lg" className={done ? "grow" : ""} onClick={() => open(item.url)}><ExternalLink size={17} /> Open</Pill>
           </div>
           <div className="row wrap" style={{ gap: 4, marginLeft: -14 }}>
-            {item.status === "inbox" && <Pill variant="text" size="sm" onClick={() => setStatus(item.id, "queued")}><ListPlus size={16} /> Queue</Pill>}
+            {item.status === "inbox" && <Pill variant="text" size="sm" onClick={() => setStatus(item.id, "queued").catch(fail("Couldn't queue it"))}><ListPlus size={16} /> Queue</Pill>}
             {!done && !isActive && <Pill variant="text" size="sm" onClick={finish}><Check size={16} /> Mark done</Pill>}
-            {!done && item.status !== "skipped" && <Pill variant="text" size="sm" onClick={() => { void setStatus(item.id, "skipped"); toast("Skipped"); }}><SkipForward size={16} /> Skip</Pill>}
-            {(done || item.status === "skipped") && <Pill variant="text" size="sm" onClick={() => setStatus(item.id, "inbox")}>Back to inbox</Pill>}
+            {!done && item.status !== "skipped" && <Pill variant="text" size="sm" onClick={() => { setStatus(item.id, "skipped").then(() => toast("Skipped"), fail("Couldn't skip it")); }}><SkipForward size={16} /> Skip</Pill>}
+            {(done || item.status === "skipped") && <Pill variant="text" size="sm" onClick={() => setStatus(item.id, "inbox").catch(fail("Couldn't move it"))}>Back to inbox</Pill>}
             <Pill variant="text" size="sm" onClick={() => setLogOpen(true)}><Clock size={16} /> Log time</Pill>
           </div>
         </div>
@@ -160,7 +171,7 @@ export function ItemDetailScreen() {
           <p className="prose">{ai.overlap}</p>
           {!done && item.status !== "skipped" && (
             <Pill variant="tonal" size="sm" style={{ marginTop: 10, alignSelf: "flex-start" }}
-              onClick={() => { void setStatus(item.id, "skipped"); toast("Skipped — already knew this one"); }}>
+              onClick={() => { setStatus(item.id, "skipped").then(() => toast("Skipped — already knew this one"), fail("Couldn't skip it")); }}>
               <SkipForward size={15} /> Skip, I know this
             </Pill>
           )}
@@ -177,13 +188,13 @@ export function ItemDetailScreen() {
       {!!cats.data?.length && (
         <Block title="Category">
           <div className="chips-scroll">
-            {cats.data.map((c) => <Chip key={c.id} active={c.id === item.category?.id} onClick={() => update.mutate({ id: item.id, category_id: c.id, category: c })}>{c.name}</Chip>)}
+            {cats.data.map((c) => <Chip key={c.id} active={c.id === item.category?.id} onClick={() => update.mutate({ id: item.id, category_id: c.id, category: c }, { onError: fail("Couldn't change category") })}>{c.name}</Chip>)}
           </div>
         </Block>
       )}
 
       <Block title="Notes">
-        <textarea className="input" defaultValue={item.notes ?? ""} placeholder="Your own notes" onBlur={(e) => { if (e.target.value !== (item.notes ?? "")) update.mutate({ id: item.id, notes: e.target.value }); }} />
+        <textarea className="input" defaultValue={item.notes ?? ""} placeholder="Your own notes" onBlur={(e) => { if (e.target.value !== (item.notes ?? "")) update.mutate({ id: item.id, notes: e.target.value }, { onError: fail("Couldn't save your note") }); }} />
       </Block>
 
       {item.has_transcript && (
@@ -193,7 +204,13 @@ export function ItemDetailScreen() {
           </button>
           {showTranscript && (
             <motion.div className="slab" initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }} transition={spring} style={{ overflow: "hidden", marginTop: 8 }}>
-              <p className="body selectable" style={{ lineHeight: 1.7, maxHeight: 360, overflow: "auto" }}>{item.transcript}</p>
+              {transcript.data ? (
+                <p className="body selectable" style={{ lineHeight: 1.7, maxHeight: 360, overflow: "auto" }}>{transcript.data}</p>
+              ) : transcript.isError ? (
+                <p className="body">{isNetworkError(transcript.error) ? "The transcript isn't saved on this device — it'll load when you're back online." : describeError(transcript.error).message}</p>
+              ) : transcript.isSuccess ? (
+                <p className="body">No transcript text was stored for this one.</p>
+              ) : <Spinner />}
             </motion.div>
           )}
         </Rise>
@@ -208,7 +225,9 @@ export function ItemDetailScreen() {
               try {
                 const r = await analyze.mutateAsync([item.url, { note: item.notes ?? undefined, reanalyzeId: item.id }]);
                 toast(r.ai_error ?? "Re-analyzed");
-              } catch (e) { toast((e as Error).message); }
+              } catch (e) {
+                toast(isNetworkError(e) ? "Re-analyzing needs a connection — try again once you're back online" : `Couldn't re-analyze — ${describeError(e).message}`);
+              }
               finally { setReanalyzing(false); }
             }}><RefreshCw size={16} /> Re-analyze</Pill>
             <Pill variant="text" size="sm" onClick={() => setConfirmDel(true)} style={{ color: "var(--error)" }}><Trash2 size={16} /> Delete</Pill>
@@ -224,12 +243,15 @@ export function ItemDetailScreen() {
         </div>
       </Sheet>
 
-      <LogTimeSheet open={logOpen} onClose={() => setLogOpen(false)} itemId={item.id} onLogged={() => { qc.invalidateQueries({ queryKey: ["activity"] }); qc.invalidateQueries({ queryKey: ["sessions"] }); toast("Time logged"); }} />
+      <LogTimeSheet open={logOpen} onClose={() => setLogOpen(false)} itemId={item.id} onError={fail("Couldn't log that")}
+        onLogged={() => { qc.invalidateQueries({ queryKey: ["activity"] }); qc.invalidateQueries({ queryKey: ["sessions"] }); toast("Time logged"); }} />
 
       <FinishPromptSheet open={finishPromptOpen} onClose={() => setFinishPromptOpen(false)} itemId={item.id} hasTakeaway={!!ai.takeaway}
         onDone={async (minutes) => {
-          if (minutes > 0) await logManualMinutes(item.id, minutes);
-          await setStatus(item.id, "completed");
+          try {
+            if (minutes > 0) await logManualMinutes(item.id, minutes);
+            await setStatus(item.id, "completed");
+          } catch (e) { fail("Couldn't mark it done")(e); return; }
           qc.invalidateQueries({ queryKey: ["activity"] });
           qc.invalidateQueries({ queryKey: ["sessions"] });
           setFinishPromptOpen(false);
@@ -249,9 +271,14 @@ function Block({ title, children }: { title: string; children: React.ReactNode }
   return <Rise><section className="col" style={{ gap: 10 }}><p className="title-sm">{title}</p>{children}</section></Rise>;
 }
 
-function LogTimeSheet({ open, onClose, itemId, onLogged }: { open: boolean; onClose: () => void; itemId: string; onLogged: () => void }) {
+function LogTimeSheet({ open, onClose, itemId, onLogged, onError }: { open: boolean; onClose: () => void; itemId: string; onLogged: () => void; onError: (e: unknown) => void }) {
   const [busy, setBusy] = useState(false);
-  const log = async (m: number) => { setBusy(true); try { await logManualMinutes(itemId, m); onLogged(); onClose(); } finally { setBusy(false); } };
+  const log = async (m: number) => {
+    setBusy(true);
+    try { await logManualMinutes(itemId, m); onLogged(); onClose(); }
+    catch (e) { onError(e); }
+    finally { setBusy(false); }
+  };
   return (
     <Sheet open={open} onClose={onClose} title="Log learning time">
       <p className="body" style={{ marginBottom: 16 }}>Watched it outside the app? Add the time so your stats stay honest.</p>

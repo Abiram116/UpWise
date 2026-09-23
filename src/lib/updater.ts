@@ -57,7 +57,8 @@ export async function checkForUpdate(): Promise<UpdateInfo | null> {
     const r = await fetch(`https://api.github.com/repos/${RELEASE_REPO}/releases/latest`, {
       headers: { Accept: "application/vnd.github+json" },
     });
-    if (!r.ok) return null;
+    // Not "no update": a rate-limit or outage must not claim you're up to date.
+    if (!r.ok) throw new Error(r.status === 403 || r.status === 429 ? "GitHub is limiting update checks right now. Try again in an hour." : "GitHub didn't answer. Try again in a bit.");
     const rel = await r.json();
     const version: string = (rel.tag_name ?? "").replace(/^v/, "");
     if (!version || !newer(version, current)) return null;

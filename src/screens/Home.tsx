@@ -6,6 +6,7 @@ import { Flame, Play, RefreshCw } from "lucide-react";
 import { fetchCoach, useActivity, useItems, useProfile } from "../lib/api";
 import { heuristicPick, streak, todayMinutes, backlogHealth, weekly, isOnBreak, breakDaySet } from "../lib/stats";
 import { getPref, setPref } from "../lib/store";
+import { describeError } from "../lib/errors";
 import { COACH_TTL_MS } from "../lib/config";
 import { fmtMinutes, greeting, pluralize } from "../lib/utils";
 import type { CoachResult, Item } from "../lib/types";
@@ -28,7 +29,13 @@ export function useCoach(enabled: boolean, validIds?: Set<string>) {
     staleTime: COACH_TTL_MS,
     retry: 1,
   });
-  return { coach: q.data ?? cached ?? null, refresh: async () => { const c = await q.refetch(); if (c.data) await setPref("coach", c.data); }, loading: q.isFetching };
+  const refresh = async (): Promise<unknown> => {
+    const c = await q.refetch();
+    if (c.error) return c.error;
+    if (c.data) await setPref("coach", c.data);
+    return null;
+  };
+  return { coach: q.data ?? cached ?? null, refresh, loading: q.isFetching };
 }
 
 export function HomeScreen() {
@@ -71,7 +78,7 @@ export function HomeScreen() {
         </header>
       </Rise>
 
-      {items.isError ? <ErrorState message={items.error.message} onRetry={() => items.refetch()} /> : items.isLoading ? <Skeleton h={220} r={28} /> : pick ? (
+      {!items.data && items.isError ? <ErrorState error={items.error} onRetry={() => items.refetch()} /> : items.isPending ? <Skeleton h={220} r={28} /> : pick ? (
         <Rise>
           <motion.section className="slab" layout transition={spring}>
             <button className="grow" style={{ textAlign: "left", width: "100%" }} onClick={() => nav(`/item/${pick.id}`)}>
@@ -91,7 +98,7 @@ export function HomeScreen() {
               </Pill>
               <Pill variant="text" size="lg" onClick={() => nav(`/item/${pick.id}`)}>Details</Pill>
               <span className="grow" />
-              <button aria-label="Ask the coach again" className="pill pill-text pill-icon" onClick={async () => { await refresh(); toast("Coach refreshed"); }}>
+              <button aria-label="Ask the coach again" className="pill pill-text pill-icon" onClick={async () => { const err = await refresh(); toast(err ? `Coach unavailable — ${describeError(err).message}` : "Coach refreshed"); }}>
                 <RefreshCw size={17} style={{ animation: coachLoading ? "spin 0.8s linear infinite" : undefined }} />
               </button>
             </div>

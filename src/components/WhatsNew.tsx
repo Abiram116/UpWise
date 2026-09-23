@@ -4,6 +4,7 @@ import { Bell } from "lucide-react";
 import { isPermissionGranted } from "@tauri-apps/plugin-notification";
 import { currentVersion } from "../lib/updater";
 import { RELEASE_REPO } from "../lib/config";
+import { useBackHandler } from "../lib/backHandler";
 import { haptic } from "../lib/haptics";
 import { isTauri } from "../lib/platform";
 import { ensurePermission } from "../lib/notifications";
@@ -63,6 +64,7 @@ function WhatsNewOverlay({ version, notes, needsNotifPermission, onDismiss }: {
   const [asking, setAsking] = useState(false);
   const [granted, setGranted] = useState(false);
   useEffect(() => { haptic.tap(); }, []);
+  useBackHandler(true, onDismiss);
 
   return (
     <motion.div className="whatsnew-scrim" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.25 }}>

@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "react-router";
 import { motion } from "motion/react";
 import { Search, Trash2, X } from "lucide-react";
-import { useCategories, useItems, useSetStatus, useDeleteItemWithUndo } from "../lib/api";
+import { useCategories, useItems, useSetStatus, useDeleteItemWithUndo, useTranscriptSearch } from "../lib/api";
 import { neglectedItems } from "../lib/stats";
 import { getPref, setPref } from "../lib/store";
 import { relativeTime, pluralize } from "../lib/utils";
@@ -18,6 +18,11 @@ export function LibraryScreen() {
   const cats = useCategories();
   const [params, setParams] = useSearchParams();
   const [q, setQ] = useState("");
+  // Transcripts are searched on the server (the list never downloads them), so wait for a
+  // pause in typing instead of firing a request per keystroke.
+  const [debouncedQ, setDebouncedQ] = useState("");
+  useEffect(() => { const t = setTimeout(() => setDebouncedQ(q), 350); return () => clearTimeout(t); }, [q]);
+  const transcriptHits = useTranscriptSearch(debouncedQ).data;
   const filter = (params.get("f") as Filter) || "todo";
   const cat = params.get("cat");
   const [groomOpen, setGroomOpen] = useState(false);
@@ -47,7 +52,7 @@ export function LibraryScreen() {
         i.tags.some((t) => t.includes(s)) ||
         (i.ai?.summary ?? "").toLowerCase().includes(s) ||
         (i.ai?.key_concepts ?? []).some((c) => c.toLowerCase().includes(s)) ||
-        (i.transcript ?? "").toLowerCase().includes(s),
+        !!transcriptHits?.has(i.id),
       );
     }
     if (filter === "todo") {
@@ -55,7 +60,7 @@ export function LibraryScreen() {
       l = [...l].sort((a, b) => rank[a.status] - rank[b.status] || (b.relevance_score ?? 0) - (a.relevance_score ?? 0));
     }
     return l;
-  }, [items.data, filter, cat, q]);
+  }, [items.data, filter, cat, q, transcriptHits]);
 
   const set = (k: string, v: string | null) => {
     const p = new URLSearchParams(params);
@@ -109,12 +114,12 @@ export function LibraryScreen() {
         </div>
       </Rise>
 
-      {items.isError ? <ErrorState message={items.error.message} onRetry={() => items.refetch()} /> : items.isLoading ? (
+      {!items.data && items.isError ? <ErrorState error={items.error} onRetry={() => items.refetch()} /> : items.isPending ? (
         <div className="col">{[0, 1, 2, 3].map((i) => <Skeleton key={i} h={64} r={18} />)}</div>
       ) : list.length === 0 ? (
         <Empty title={q ? "No matches" : filter === "done" ? "Nothing finished yet" : "All clear"} body={q ? "Try a different search." : filter === "done" ? "Finish something and it lands here." : "Save a link to get started."} />
       ) : (
-        <motion.div className="rows" variants={stagger} initial="hidden" animate="show" key={`${filter}-${cat}-${q}`}>
+        <motion.div className="rows" variants={stagger} initial="hidden" animate="show" key={`${filter}-${cat}-${debouncedQ}`}>
           {list.map((i) => <ItemRow key={i.id} item={i} />)}
         </motion.div>
       )}

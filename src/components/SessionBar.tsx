@@ -2,12 +2,11 @@ import { useEffect, useState, useSyncExternalStore } from "react";
 import { useNavigate } from "react-router";
 import { AnimatePresence, motion } from "motion/react";
 import { Check, Square } from "lucide-react";
-import { useQueryClient } from "@tanstack/react-query";
-import { endSession, startSession } from "../lib/api";
-import { supabase } from "../lib/supabase";
+import { endSession, invalidateProgress, setItemStatus, startSession } from "../lib/api";
+import { describeError } from "../lib/errors";
 import { getPref, setPref } from "../lib/store";
 import type { Item } from "../lib/types";
-import { Pill, spring } from "./ui";
+import { Pill, spring, useToast } from "./ui";
 
 export interface ActiveSession { sessionId: string; itemId: string; title: string; startedAt: string; estimatedMinutes: number }
 
@@ -18,7 +17,7 @@ const emit = () => subs.forEach((s) => s());
 
 const sessionStore = {
   get: () => active,
-  subscribe: (l: () => void) => { subs.add(l); return () => subs.delete(l); },
+  subscribe: (l: () => void) => { subs.add(l); return () => { subs.delete(l); }; },
   async hydrate() {
     if (hydrated) return;
     hydrated = true;
@@ -33,20 +32,25 @@ const sessionStore = {
     }
     active = saved; emit();
   },
+  // Both directions go through the outbox (see api.ts), so starting or stopping with no
+  // signal just queues — the timer and the logged time are never lost to a failed request.
   async start(item: Item) {
     if (active) await sessionStore.stop(false);
     const s = await startSession(item.id);
-    await supabase.from("items").update({ status: "in_progress", started_at: item.started_at ?? new Date().toISOString() }).eq("id", item.id);
     active = { sessionId: s.id, itemId: item.id, title: item.title ?? "Learning", startedAt: s.started_at, estimatedMinutes: item.estimated_minutes ?? 10 };
     await setPref("activeSession", active); emit();
+    await setItemStatus(item.id, "in_progress");
   },
   async stop(complete: boolean) {
     if (!active) return;
     const a = active;
+    // End it before clearing it: if the write is rejected outright, the session is still on
+    // screen to retry rather than silently gone.
+    await endSession(a.sessionId, a.startedAt);
     active = null; emit();
     await setPref("activeSession", null);
-    await endSession(a.sessionId, a.startedAt);
-    if (complete) await supabase.from("items").update({ status: "completed", completed_at: new Date().toISOString() }).eq("id", a.itemId);
+    if (complete) await setItemStatus(a.itemId, "completed");
+    invalidateProgress();
   },
 };
 
@@ -72,15 +76,13 @@ function useElapsed(startedAt: string | undefined) {
 export function SessionBar() {
   const a = useActiveSession();
   const nav = useNavigate();
-  const qc = useQueryClient();
+  const toast = useToast();
   const elapsed = useElapsed(a?.startedAt);
   useEffect(() => { void sessionStore.hydrate(); }, []);
 
   const finish = async (complete: boolean) => {
-    await sessionStore.stop(complete);
-    qc.invalidateQueries({ queryKey: ["items"] });
-    qc.invalidateQueries({ queryKey: ["activity"] });
-    qc.invalidateQueries({ queryKey: ["sessions"] });
+    try { await sessionStore.stop(complete); }
+    catch (e) { toast(`Couldn't stop the session — ${describeError(e).message}`); }
   };
 
   return (

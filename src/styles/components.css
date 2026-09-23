@@ -252,3 +252,9 @@ select.input { padding-right: 36px; appearance: none; -webkit-appearance: none; 
   .pill-sm { height: 44px; }
   .rowitem { min-height: 72px; }
 }
+
+/* connection banner — sits above the page, inside the content column */
+.conn-line, .conn-slab { max-width: var(--content-max); margin: 0 auto; overflow: hidden; }
+.conn-line { display: flex; align-items: center; gap: 8px; color: var(--on-surface-2); font-size: 13px; padding-bottom: var(--s-4); }
+.conn-slab { margin-bottom: var(--s-6); }
+.slab-warm .body { color: color-mix(in srgb, var(--on-warm-container) 82%, transparent); }

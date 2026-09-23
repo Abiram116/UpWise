@@ -1,7 +1,9 @@
 import { useEffect, useMemo, useState } from "react";
 import { Bell, ChevronRight, Coffee, Copy, CopyCheck, Download, FileText, Moon, RefreshCw, Target, User } from "lucide-react";
 import { useActivity, useCategories, useProfile, useUpdateProfile, useItems, useSessions } from "../lib/api";
-import { replanNotifications, sendTestNotification, settingsOf } from "../lib/notifications";
+import { ensurePermission, replanNotifications, sendTestNotification, settingsOf } from "../lib/notifications";
+import { describeError, isNetworkError } from "../lib/errors";
+import "../lib/android-bridge";
 import { checkForUpdate, currentVersion, type UpdateInfo } from "../lib/updater";
 import { isTauri, platform } from "../lib/platform";
 import { RELEASE_REPO } from "../lib/config";
@@ -11,7 +13,7 @@ import { isoDay } from "../lib/utils";
 import { extractNotes } from "../lib/changelog";
 import type { Profile } from "../lib/types";
 import { useCoach } from "./Home";
-import { Chip, Page, Pill, Rise, Segmented, Sheet, Switch, useToast } from "../components/ui";
+import { Chip, ErrorState, Page, Pill, Rise, Segmented, Sheet, Skeleton, Switch, useToast } from "../components/ui";
 
 const TARGETS = [15, 30, 45, 60, 90];
 const HOURS = Array.from({ length: 24 }, (_, h) => `${String(h).padStart(2, "0")}:00`);
@@ -45,9 +47,18 @@ export function SettingsScreen() {
   const p = profile.data;
   const s = settingsOf(p);
   const onBreak = isOnBreak(p?.settings);
+  const fail = (what: string) => (e: unknown) => toast(`${what} — ${describeError(e).message}`);
+  // Once Android has been told "no", it never shows the permission dialog again — the only
+  // way back is the app's notification settings, so offer that instead of a dead end.
+  const notificationsBlocked = () => toast(
+    "Notifications are blocked for UpWise",
+    window.AndroidNative?.openNotificationSettings ? { label: "Settings", onClick: () => window.AndroidNative?.openNotificationSettings?.() } : undefined,
+  );
   const saveSettings = async (patch: Partial<Profile["settings"]>) => {
     const next = { ...(p?.settings ?? {}), ...patch };
-    await update.mutateAsync({ settings: next });
+    if ((patch.enabled || patch.weekly_recap) && isTauri && !(await ensurePermission())) { notificationsBlocked(); return; }
+    try { await update.mutateAsync({ settings: next }); }
+    catch (e) { fail("Couldn't save that")(e); return; }
     if (p && items.data && sessions.data) {
       const n = await replanNotifications({ profile: { ...p, settings: next }, items: items.data, sessions: sessions.data, coach, activity: activity.data });
       if (patch.enabled !== undefined) toast(patch.enabled ? `Nudges on · ${n} scheduled` : "Nudges off");
@@ -57,11 +68,18 @@ export function SettingsScreen() {
   const doCheck = async () => {
     setChecking(true);
     try { const u = await checkForUpdate(); setUpd(u ?? "none"); }
-    catch (e) { toast(`Update check failed: ${(e as Error).message}`); }
+    catch (e) { toast(isNetworkError(e) || !navigator.onLine ? "Can't check for updates offline" : `Update check failed — ${describeError(e).message}`); }
     finally { setChecking(false); }
   };
 
-  if (!p) return <Page><h1 className="display">Settings</h1></Page>;
+  if (!p) {
+    return (
+      <Page>
+        <h1 className="display">Settings</h1>
+        {profile.isError ? <ErrorState error={profile.error} onRetry={() => profile.refetch()} /> : <><Skeleton h={64} r={18} /><Skeleton h={64} r={18} /></>}
+      </Page>
+    );
+  }
 
   return (
     <Page>
@@ -76,7 +94,7 @@ export function SettingsScreen() {
         <div className="setting">
           <span className="setting-icon"><Target size={18} /></span>
           <div className="grow"><div className="title-sm">Daily target</div><div className="meta">What you'll realistically hit</div></div>
-          <select className="input" style={{ width: 104, height: 40, padding: "0 14px" }} value={p.daily_target_minutes} onChange={(e) => update.mutate({ daily_target_minutes: +e.target.value })}>
+          <select className="input" style={{ width: 104, height: 40, padding: "0 14px" }} value={p.daily_target_minutes} onChange={(e) => update.mutate({ daily_target_minutes: +e.target.value }, { onError: fail("Couldn't save your target") })}>
             {TARGETS.map((t) => <option key={t} value={t}>{t} min</option>)}
           </select>
         </div>
@@ -132,7 +150,7 @@ export function SettingsScreen() {
                 </div>
               </div>
             )}
-            <button className="setting" onClick={async () => { (await sendTestNotification()) ? toast("Sent a test nudge") : toast("Permission denied"); }}>
+            <button className="setting" onClick={async () => { if (await sendTestNotification()) toast("Sent a test nudge"); else notificationsBlocked(); }}>
               <div className="grow title-sm" style={{ color: "var(--primary)" }}>Send a test notification</div>
             </button>
           </>
@@ -151,7 +169,7 @@ export function SettingsScreen() {
         <div className="setting">
           <span className="setting-icon"><CopyCheck size={18} /></span>
           <div className="grow"><div className="title-sm">Warn about similar saves</div><div className="meta">Flag likely duplicates when you save something new</div></div>
-          <Switch on={p.settings.warn_duplicates !== false} onChange={(v) => update.mutate({ settings: { ...p.settings, warn_duplicates: v } })} label="Warn about similar saves" />
+          <Switch on={p.settings.warn_duplicates !== false} onChange={(v) => update.mutate({ settings: { ...p.settings, warn_duplicates: v } }, { onError: fail("Couldn't save that") })} label="Warn about similar saves" />
         </div>
       </Group>
 
@@ -180,7 +198,10 @@ export function SettingsScreen() {
       </Sheet>
 
       <Sheet open={goalOpen} onClose={() => setGoalOpen(false)} title="Your goal">
-        <GoalEditor profile={p} onSave={async (goal, interests, name) => { await update.mutateAsync({ goal, interests, display_name: name }); setGoalOpen(false); toast("Saved"); }} />
+        <GoalEditor profile={p} onSave={async (goal, interests, name) => {
+          try { await update.mutateAsync({ goal, interests, display_name: name }); setGoalOpen(false); toast("Saved"); }
+          catch (e) { fail("Couldn't save")(e); }
+        }} />
       </Sheet>
 
       <Sheet open={exportOpen} onClose={() => setExportOpen(false)} title="Skills summary">
@@ -210,7 +231,11 @@ export function SettingsScreen() {
               ? <p className="meta">Downloads in the background, then opens the installer automatically — tap Update on the next screen.</p>
               : <p className="meta">The app will close to install. Windows sometimes silently blocks the installer (no code-signing certificate) — if it doesn't reopen on v{upd.version} within a minute, grab the installer manually from <a href={`https://github.com/${RELEASE_REPO}/releases/latest`} target="_blank" rel="noreferrer" style={{ color: "var(--primary)" }}>the latest release</a>.</p>}
             {progress != null && <div className="bar"><i style={{ width: "100%", transform: `scaleX(${progress / 100})`, transition: "transform .2s var(--out)" }} /></div>}
-            <Pill variant="filled" size="lg" loading={progress != null && progress < 100} onClick={async () => { setProgress(upd.apkUrl ? null : 0); await upd.install(setProgress); if (upd.apkUrl) setUpd(null); }}>
+            <Pill variant="filled" size="lg" loading={progress != null && progress < 100} onClick={async () => {
+              setProgress(upd.apkUrl ? null : 0);
+              try { await upd.install(setProgress); if (upd.apkUrl) { setUpd(null); toast("Downloading — watch the notification"); } }
+              catch (e) { setProgress(null); toast(isNetworkError(e) ? "Download failed — check your connection and try again" : `Couldn't install — ${describeError(e).message}`); }
+            }}>
               {upd.apkUrl ? "Download & install" : "Install and restart"}
             </Pill>
           </div>

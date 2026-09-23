@@ -9,6 +9,9 @@ declare global {
       downloadAndInstall?: (url: string) => void;
       canInstallPackages?: () => boolean;
       openInstallPermissionSettings?: () => void;
+      openNotificationSettings?: () => void;
     };
+    /** Called by MainActivity on the system back gesture; true = handled in-app. */
+    __upwiseBack?: () => boolean;
   }
 }

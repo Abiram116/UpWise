@@ -4,6 +4,8 @@ import { AnimatePresence, motion } from "motion/react";
 import { ArrowUpRight, BarChart3, Home, Library, Plus, Settings } from "lucide-react";
 import { AddSheet, useAddQueue } from "./AddSheet";
 import { SessionBar } from "./SessionBar";
+import { ConnectionBanner } from "./ConnectionBanner";
+import { useBackHandler } from "../lib/backHandler";
 import { onShare } from "../lib/share";
 import { extractUrl } from "../lib/utils";
 import { Spinner, spring } from "./ui";
@@ -17,7 +19,9 @@ const dests = [
 
 function Dest({ to, label, icon: Icon, layoutId }: (typeof dests)[number] & { layoutId: string }) {
   return (
-    <NavLink to={to} end={to === "/"} className="dest">
+    // replace: tabs are siblings, not a trail — switching them shouldn't pile up history
+    // that the back gesture then has to walk through one tab at a time.
+    <NavLink to={to} end={to === "/"} replace className="dest">
       {({ isActive }) => (
         <span data-active={isActive} className="dest" style={{ display: "contents" }}>
           <span className="dest-ind">
@@ -33,7 +37,20 @@ function Dest({ to, label, icon: Icon, layoutId }: (typeof dests)[number] & { la
 
 export function AppShell() {
   const loc = useLocation();
+  const nav = useNavigate();
   const [addOpen, setAddOpen] = useState(false);
+
+  // Android back, after any open sheet has had its turn: a detail screen goes back to where
+  // it was opened from (or Today on a cold start from a notification), another tab goes to
+  // Today, and Today itself lets the app go to the background.
+  useBackHandler(true, () => {
+    if (loc.pathname.startsWith("/item/")) {
+      if (loc.key !== "default" && window.history.length > 1) nav(-1); else nav("/", { replace: true });
+      return true;
+    }
+    if (loc.pathname !== "/") { nav("/", { replace: true }); return true; }
+    return false;
+  });
   const showFab = loc.pathname === "/" || loc.pathname === "/library";
 
   // .app-main has no overflow rule of its own — the window/document is the real scroll
@@ -53,6 +70,7 @@ export function AppShell() {
       </aside>
 
       <main className="app-main">
+        <ConnectionBanner />
         <Suspense fallback={<div style={{ display: "grid", placeItems: "center", minHeight: "40dvh" }}><Spinner size={26} /></div>}>
           <AnimatePresence mode="wait" initial={false}>
             <div key={loc.pathname.split("/")[1] || "home"}><Outlet /></div>
