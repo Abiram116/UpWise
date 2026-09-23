@@ -1,10 +1,6 @@
-export type Theme = "system" | "light" | "dark";
+import "./lib/android-bridge";
 
-declare global {
-  interface Window {
-    AndroidNative?: { setLightStatusBar?: (light: boolean) => void };
-  }
-}
+export type Theme = "system" | "light" | "dark";
 
 function currentTheme(): Theme {
   try { return (localStorage.getItem("upwise:theme") as Theme) || "system"; } catch { return "system"; }

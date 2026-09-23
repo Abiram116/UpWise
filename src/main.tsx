@@ -14,7 +14,9 @@ import "./styles/components.css";
 initTheme();
 
 const queryClient = new QueryClient({
-  defaultOptions: { queries: { retry: 1, refetchOnWindowFocus: true } },
+  // Switching apps and coming back shouldn't refire every active query at once — that's
+  // exactly the moment the user is looking at the screen, so it's the worst time for jank.
+  defaultOptions: { queries: { retry: 1, refetchOnWindowFocus: false } },
 });
 
 ReactDOM.createRoot(document.getElementById("root")!).render(

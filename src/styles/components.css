@@ -110,6 +110,8 @@ select.input { padding-right: 36px; appearance: none; -webkit-appearance: none; 
   width: 88px; aspect-ratio: 16 / 9; border-radius: var(--r-thumb); overflow: hidden; flex-shrink: 0;
   background: var(--surface-mid); display: flex; align-items: center; justify-content: center; color: var(--on-surface-3);
 }
+.thumb[data-tone="sage"] { background: var(--primary-container); color: var(--on-primary-container); }
+.thumb[data-tone="warm"] { background: var(--warm-container); color: var(--on-warm-container); }
 .thumb img { width: 100%; height: 100%; object-fit: cover; }
 .thumb-lg { width: 100%; aspect-ratio: 16 / 9; border-radius: var(--r-slab); }
 

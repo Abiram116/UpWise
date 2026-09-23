@@ -1,11 +1,12 @@
 import { isAndroid } from "./platform";
+import "./android-bridge";
 
-// The WebView's Vibration API works fine on Android once VIBRATE is in the manifest.
-// Desktop/iOS silently no-op — this is deliberately tasteful, not on every tap.
-const vibrate = (pattern: number | number[]) => { try { if (isAndroid()) navigator.vibrate?.(pattern); } catch { /* ignore */ } };
+// Routed through MainActivity.kt's performHapticFeedback — the same OS-tuned taps system UI
+// uses, not a raw vibrate() buzz. Falls back to nothing on desktop/older installs.
+const fire = (type: "tap" | "success" | "warn") => { try { if (isAndroid()) window.AndroidNative?.haptic?.(type); } catch { /* ignore */ } };
 
 export const haptic = {
-  tap: () => vibrate(8),
-  success: () => vibrate([12, 40, 18]),
-  warn: () => vibrate([16, 60, 16, 60, 16]),
+  tap: () => fire("tap"),
+  success: () => fire("success"),
+  warn: () => fire("warn"),
 };

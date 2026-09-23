@@ -291,7 +291,9 @@ export async function fetchArticle(canonicalUrl: string): Promise<LinkMeta> {
     }
   } catch { /* fall through */ }
 
-  if (!meta.title || !meta.content) {
+  // Still worth a direct fetch even when Jina fully succeeded — its markdown output has no
+  // structured place for og:image, so a thumbnail-only page fetch is the only way to get one.
+  if (!meta.title || !meta.content || !meta.thumbnailUrl) {
     try {
       const r = await fetch(canonicalUrl, { headers: { "User-Agent": UA } });
       const contentType = r.headers.get("content-type") ?? "";
@@ -302,9 +304,9 @@ export async function fetchArticle(canonicalUrl: string): Promise<LinkMeta> {
       } else {
         const html = await r.text();
         meta.title ??= metaTag(html, "og:title") ?? html.match(/<title[^>]*>([^<]*)<\/title>/i)?.[1]?.trim() ?? null;
-        meta.description = metaTag(html, "og:description") ?? metaTag(html, "description");
-        meta.thumbnailUrl = metaTag(html, "og:image");
-        meta.channel = metaTag(html, "og:site_name");
+        meta.description ??= metaTag(html, "og:description") ?? metaTag(html, "description");
+        meta.thumbnailUrl ??= metaTag(html, "og:image");
+        meta.channel ??= metaTag(html, "og:site_name");
         if (!meta.content) {
           const readable = extractReadableText(html);
           if (readable) { meta.content = readable.slice(0, 40_000); meta.transcriptStatus = "readability_fallback"; }

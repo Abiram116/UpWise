@@ -55,7 +55,14 @@ export function useActiveSession(): ActiveSession | null { return useSyncExterna
 
 function useElapsed(startedAt: string | undefined) {
   const [now, setNow] = useState(Date.now());
-  useEffect(() => { const t = setInterval(() => setNow(Date.now()), 1000); return () => clearInterval(t); }, []);
+  // Ticking forever regardless of session state would burn battery for no reason — only
+  // run the interval while there's actually an active session to show elapsed time for.
+  useEffect(() => {
+    if (!startedAt) return;
+    setNow(Date.now());
+    const t = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(t);
+  }, [startedAt]);
   if (!startedAt) return "";
   const s = Math.max(0, Math.floor((now - new Date(startedAt).getTime()) / 1000));
   const m = Math.floor(s / 60), r = s % 60;

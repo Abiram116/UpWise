@@ -26,7 +26,23 @@ env:
   VITE_APP_EMAIL: ${{ secrets.VITE_APP_EMAIL }}
 
 jobs:
+  # Creates the (empty) GitHub Release first so windows/android can build and upload to it
+  # in true parallel, instead of android waiting on the whole windows build to finish just
+  # because tauri-action used to be the thing that created the release.
+  create-release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          name: "UpWise ${{ github.ref_name }}"
+          body: "See the assets below. Windows: run the .exe installer (auto-updates from now on). Android: install the .apk."
+          draft: false
+          prerelease: false
+
   windows:
+    needs: create-release
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
@@ -52,8 +68,8 @@ jobs:
           args: --bundles nsis
 
   android:
+    needs: create-release
     runs-on: ubuntu-latest
-    needs: windows
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4

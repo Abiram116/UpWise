@@ -70,7 +70,7 @@ export function ItemDetailScreen() {
           <motion.button className="thumb thumb-lg" layoutId={`thumb-${item.id}`} transition={spring} onClick={() => open(item.url)} style={{ position: "relative" }} whileTap={{ scale: 0.99 }}>
             <img src={item.thumbnail_url} alt="" />
             <span style={{ position: "absolute", inset: 0, display: "grid", placeItems: "center" }}>
-              <span style={{ width: 64, height: 64, borderRadius: 999, background: "rgba(0,0,0,0.5)", display: "grid", placeItems: "center", color: "#fff", backdropFilter: "blur(6px)" }}><Play size={26} fill="currentColor" /></span>
+              <span style={{ width: 64, height: 64, borderRadius: 999, background: "rgba(0,0,0,0.62)", display: "grid", placeItems: "center", color: "#fff" }}><Play size={26} fill="currentColor" /></span>
             </span>
           </motion.button>
         ) : null}

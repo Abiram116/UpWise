@@ -10,10 +10,11 @@ export function ItemRow({ item, compact }: { item: Item; compact?: boolean }) {
   const Icon = item.source === "youtube" ? Film : item.source === "instagram" ? Clapperboard : Newspaper;
   const done = item.status === "completed";
   const trust = confidence(item);
+  const tone = item.source === "youtube" ? "sage" : "warm";
   return (
     <motion.button variants={rise} className="rowitem" onClick={() => nav(`/item/${item.id}`)} whileTap={{ scale: 0.985 }} transition={spring}>
-      <motion.div className="thumb" layoutId={`thumb-${item.id}`} style={{ opacity: done ? 0.55 : 1 }}>
-        {item.thumbnail_url ? <img src={item.thumbnail_url} alt="" loading="lazy" /> : <Icon size={20} strokeWidth={1.8} />}
+      <motion.div className="thumb" data-tone={item.thumbnail_url ? undefined : tone} layoutId={`thumb-${item.id}`} style={{ opacity: done ? 0.55 : 1 }}>
+        {item.thumbnail_url ? <img src={item.thumbnail_url} alt="" loading="lazy" /> : <Icon size={22} strokeWidth={1.8} />}
       </motion.div>
       <div className="grow col" style={{ gap: 3 }}>
         <div className={compact ? "truncate" : "clamp-2"} style={{ fontSize: 15.5, lineHeight: 1.3, fontWeight: 500, color: done ? "var(--on-surface-3)" : "var(--on-surface)" }}>

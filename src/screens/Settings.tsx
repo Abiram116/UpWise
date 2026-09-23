@@ -192,10 +192,10 @@ export function SettingsScreen() {
           <div className="col" style={{ gap: 14 }}>
             <p className="meta">You're on v{upd.current}.</p>
             {upd.notes && <p className="body selectable" style={{ whiteSpace: "pre-wrap", maxHeight: 200, overflow: "auto" }}>{upd.notes}</p>}
-            {upd.apkUrl && <p className="meta">Your browser downloads the APK; open it to install over the current version.</p>}
+            {upd.apkUrl && <p className="meta">Downloads in the background, then opens the installer automatically — tap Update on the next screen.</p>}
             {progress != null && <div className="bar"><i style={{ width: "100%", transform: `scaleX(${progress / 100})`, transition: "transform .2s var(--out)" }} /></div>}
             <Pill variant="filled" size="lg" loading={progress != null && progress < 100} onClick={async () => { setProgress(upd.apkUrl ? null : 0); await upd.install(setProgress); if (upd.apkUrl) setUpd(null); }}>
-              {upd.apkUrl ? "Download update" : "Install and restart"}
+              {upd.apkUrl ? "Download & install" : "Install and restart"}
             </Pill>
           </div>
         )}

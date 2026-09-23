@@ -2,6 +2,7 @@ import { getVersion } from "@tauri-apps/api/app";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { isAndroid, isDesktop, isTauri } from "./platform";
 import { RELEASE_REPO } from "./config";
+import "./android-bridge";
 
 export interface UpdateInfo {
   version: string;
@@ -67,7 +68,10 @@ export async function checkForUpdate(): Promise<UpdateInfo | null> {
       current,
       notes: rel.body ?? "",
       apkUrl: apk.browser_download_url,
-      install: async () => { await openUrl(apk.browser_download_url); },
+      install: async () => {
+        if (window.AndroidNative?.downloadAndInstall) window.AndroidNative.downloadAndInstall(apk.browser_download_url);
+        else await openUrl(apk.browser_download_url); // older installs without the native bridge yet
+      },
     };
   }
   return null;

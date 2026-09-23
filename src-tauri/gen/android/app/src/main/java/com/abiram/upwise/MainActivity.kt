@@ -1,9 +1,18 @@
 package com.abiram.upwise
 
+import android.app.DownloadManager
+import android.content.BroadcastReceiver
+import android.content.Context
 import android.content.Intent
+import android.content.IntentFilter
+import android.net.Uri
+import android.os.Build
 import android.os.Bundle
+import android.os.Environment
 import android.os.Handler
 import android.os.Looper
+import android.util.Log
+import android.view.HapticFeedbackConstants
 import android.webkit.JavascriptInterface
 import android.webkit.WebView
 import androidx.activity.enableEdgeToEdge
@@ -13,12 +22,42 @@ import org.json.JSONObject
 class MainActivity : TauriActivity() {
   private var webView: WebView? = null
   private var pendingShare: String? = null
+  private var pendingDownloadId: Long = -1
   private val handler = Handler(Looper.getMainLooper())
+
+  private val downloadReceiver = object : BroadcastReceiver() {
+    override fun onReceive(context: Context, intent: Intent) {
+      val id = intent.getLongExtra(DownloadManager.EXTRA_DOWNLOAD_ID, -1)
+      if (id == -1L || id != pendingDownloadId) return
+      try {
+        val dm = getSystemService(Context.DOWNLOAD_SERVICE) as DownloadManager
+        val uri = dm.getUriForDownloadedFile(id) ?: return
+        startActivity(Intent(Intent.ACTION_VIEW).apply {
+          setDataAndType(uri, "application/vnd.android.package-archive")
+          addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_ACTIVITY_NEW_TASK)
+        })
+      } catch (e: Exception) {
+        Log.e("UpWise", "opening downloaded update failed", e)
+      }
+    }
+  }
 
   override fun onCreate(savedInstanceState: Bundle?) {
     enableEdgeToEdge()
     super.onCreate(savedInstanceState)
     handleShare(intent)
+    val filter = IntentFilter(DownloadManager.ACTION_DOWNLOAD_COMPLETE)
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+      registerReceiver(downloadReceiver, filter, Context.RECEIVER_NOT_EXPORTED)
+    } else {
+      @Suppress("UnspecifiedRegisterReceiverFlag")
+      registerReceiver(downloadReceiver, filter)
+    }
+  }
+
+  override fun onDestroy() {
+    try { unregisterReceiver(downloadReceiver) } catch (e: Exception) { /* never registered */ }
+    super.onDestroy()
   }
 
   override fun onNewIntent(intent: Intent) {
@@ -39,6 +78,41 @@ class MainActivity : TauriActivity() {
     fun setLightStatusBar(light: Boolean) {
       handler.post {
         WindowInsetsControllerCompat(window, window.decorView).isAppearanceLightStatusBars = light
+      }
+    }
+
+    // Subtle, OS-tuned taps instead of a blunt vibrate() buzz — same constants system UI uses.
+    @JavascriptInterface
+    fun haptic(type: String) {
+      handler.post {
+        val view = webView ?: return@post
+        val constant = when (type) {
+          "success" -> HapticFeedbackConstants.CONFIRM
+          "warn" -> HapticFeedbackConstants.REJECT
+          else -> HapticFeedbackConstants.VIRTUAL_KEY
+        }
+        view.performHapticFeedback(constant)
+      }
+    }
+
+    // Downloads the update APK via the system DownloadManager (survives backgrounding, shows
+    // a real notification) and opens the installer automatically once it lands, instead of
+    // handing the user off to a browser download they then have to hunt down themselves.
+    @JavascriptInterface
+    fun downloadAndInstall(url: String) {
+      handler.post {
+        try {
+          // A stale file from a previous update attempt can make DownloadManager choke on reuse.
+          java.io.File(getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS), "upwise-update.apk").delete()
+          val request = DownloadManager.Request(Uri.parse(url))
+            .setTitle("UpWise update")
+            .setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED)
+            .setDestinationInExternalFilesDir(this@MainActivity, Environment.DIRECTORY_DOWNLOADS, "upwise-update.apk")
+          val dm = getSystemService(Context.DOWNLOAD_SERVICE) as DownloadManager
+          pendingDownloadId = dm.enqueue(request)
+        } catch (e: Exception) {
+          Log.e("UpWise", "downloadAndInstall failed", e)
+        }
       }
     }
   }
