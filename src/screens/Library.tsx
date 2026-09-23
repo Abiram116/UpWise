@@ -104,9 +104,9 @@ export function LibraryScreen() {
           <Segmented value={filter} onChange={(v) => set("f", v)} options={[{ value: "todo", label: "To learn" }, { value: "done", label: "Done" }, { value: "all", label: "All" }]} />
           {!!cats.data?.length && (
             <div className="chips-scroll">
-              {cats.data.map((c) => {
+              {[...cats.data].sort((a, b) => (counts.get(b.id) ?? 0) - (counts.get(a.id) ?? 0)).map((c) => {
                 const n = counts.get(c.id) ?? 0;
-                if (!n && filter !== "all") return null;
+                if (!n) return null;
                 return <Chip key={c.id} active={cat === c.id} onClick={() => set("cat", cat === c.id ? null : c.id)}>{c.name} <span style={{ opacity: 0.55 }}>{n}</span></Chip>;
               })}
             </div>

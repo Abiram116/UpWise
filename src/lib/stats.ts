@@ -121,29 +121,67 @@ export function neglectedItems(items: Item[], days = 14): Item[] {
     .sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
 }
 
-export interface CategoryStat { id: string; name: string; completed: number; pending: number; minutes: number; lastDone: string | null; neglectedDays: number | null }
+export interface CategoryStat {
+  id: string; name: string;
+  completed: number; pending: number; minutes: number;
+  /** Most recent real learning in this area: a session, a start, or a completion. */
+  lastActive: string | null;
+  /** Any time spent, anything finished or in progress — i.e. you've actually begun this area. */
+  started: boolean;
+  /** Started, still has items waiting, and untouched for 14+ days. Null otherwise. */
+  neglectedDays: number | null;
+  /** Days the oldest unfinished item has been waiting. */
+  oldestWaitingDays: number | null;
+}
 
+const NEGLECT_DAYS = 14;
+const daysSince = (iso: string) => Math.floor((Date.now() - new Date(iso).getTime()) / 86400e3);
+const later = (a: string | null, b: string | null | undefined) => (!b ? a : !a || b > a ? b : a);
+
+/** Areas are derived from what you actually do, not just what you save: ranked by time spent
+ * and things finished (most recent first), with "neglected" reserved for areas you started and
+ * then dropped — an area you've only saved links into is "not started", not neglected. */
 export function byCategory(items: Item[], sessions: LearningSession[]): CategoryStat[] {
   const secondsByItem = new Map<string, number>();
-  for (const s of sessions) if (s.item_id) secondsByItem.set(s.item_id, (secondsByItem.get(s.item_id) ?? 0) + s.seconds);
+  const lastSessionByItem = new Map<string, string>();
+  for (const s of sessions) {
+    if (!s.item_id) continue;
+    secondsByItem.set(s.item_id, (secondsByItem.get(s.item_id) ?? 0) + s.seconds);
+    lastSessionByItem.set(s.item_id, later(lastSessionByItem.get(s.item_id) ?? null, s.started_at)!);
+  }
   const map = new Map<string, CategoryStat>();
   for (const i of items) {
+    if (i.status === "skipped") continue; // skipped says nothing about what you're learning
     const key = i.category?.id ?? "none";
-    const name = i.category?.name ?? "Uncategorized";
-    const c = map.get(key) ?? { id: key, name, completed: 0, pending: 0, minutes: 0, lastDone: null, neglectedDays: null };
+    const c = map.get(key) ?? {
+      id: key, name: i.category?.name ?? "Other", completed: 0, pending: 0, minutes: 0,
+      lastActive: null, started: false, neglectedDays: null, oldestWaitingDays: null,
+    };
+    const secs = secondsByItem.get(i.id) ?? 0;
+    c.minutes += Math.round(secs / 60);
     if (i.status === "completed") {
       c.completed++;
-      if (!c.lastDone || (i.completed_at && i.completed_at > c.lastDone)) c.lastDone = i.completed_at;
-    } else if (i.status !== "skipped") c.pending++;
-    c.minutes += Math.round((secondsByItem.get(i.id) ?? 0) / 60);
+      c.lastActive = later(c.lastActive, i.completed_at);
+    } else {
+      c.pending++;
+      const waited = daysSince(i.created_at);
+      c.oldestWaitingDays = Math.max(c.oldestWaitingDays ?? 0, waited);
+    }
+    if (i.status === "in_progress") c.lastActive = later(c.lastActive, i.started_at);
+    c.lastActive = later(c.lastActive, lastSessionByItem.get(i.id));
+    if (secs > 0 || i.status === "completed" || i.status === "in_progress") c.started = true;
     map.set(key, c);
   }
   for (const c of map.values()) {
-    if (c.pending > 0) {
-      c.neglectedDays = c.lastDone ? Math.floor((Date.now() - new Date(c.lastDone).getTime()) / 86400e3) : 999;
-    }
+    const idle = c.lastActive ? daysSince(c.lastActive) : null;
+    if (c.started && c.pending > 0 && idle != null && idle >= NEGLECT_DAYS) c.neglectedDays = idle;
   }
-  return [...map.values()].sort((a, b) => b.completed + b.pending - (a.completed + a.pending));
+  return [...map.values()].sort((a, b) =>
+    Number(b.started) - Number(a.started) ||
+    Number(a.id === "none") - Number(b.id === "none") ||
+    (b.lastActive ?? "").localeCompare(a.lastActive ?? "") ||
+    b.minutes + b.completed * 20 - (a.minutes + a.completed * 20) ||
+    b.pending - a.pending);
 }
 
 export interface SkillGroup { category: string; completed: number; minutes: number; concepts: string[] }

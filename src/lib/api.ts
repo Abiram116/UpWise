@@ -137,6 +137,8 @@ export function useUpdateItem() {
       return { prev };
     },
     onError: (_e, _v, ctx) => ctx?.prev && qc.setQueryData(["items"], ctx.prev),
+    // Moving the last item out of an area deletes that area server-side — refresh the list.
+    onSuccess: (_d, v) => { if ("category_id" in v) void qc.invalidateQueries({ queryKey: ["categories"] }); },
   });
 }
 
@@ -165,6 +167,7 @@ export function useDeleteItemWithUndo() {
     const timer = window.setTimeout(async () => {
       try {
         await writeOrQueue({ kind: "delete", table: "items", id: item.id });
+        void qc.invalidateQueries({ queryKey: ["categories"] }); // may have emptied an area
       } catch (e) {
         restore();
         toast(`Couldn't delete — ${describeError(e).message}`);

@@ -17,7 +17,7 @@ function Count({ to, suffix = "" }: { to: number; suffix?: string }) {
 export function StatsScreen() {
   const activity = useActivity(120);
   const items = useItems();
-  const sessions = useSessions(120);
+  const sessions = useSessions(365); // per-area minutes and "last active" need the long view
   const profile = useProfile();
 
   const data = useMemo(() => {
@@ -44,7 +44,9 @@ export function StatsScreen() {
 
   const maxMin = Math.max(1, ...data.weeks.map((w) => w.minutes));
   const target = profile.data?.daily_target_minutes ?? 30;
-  const neglected = data.cats.filter((c) => c.neglectedDays != null && c.neglectedDays >= 14).sort((a, b) => (b.neglectedDays ?? 0) - (a.neglectedDays ?? 0));
+  const started = data.cats.filter((c) => c.started);
+  const notStarted = data.cats.filter((c) => !c.started && c.pending > 0);
+  const neglected = started.filter((c) => c.neglectedDays != null).sort((a, b) => (b.neglectedDays ?? 0) - (a.neglectedDays ?? 0));
   const trendWord = data.velocity.trend === "up" ? "up from" : data.velocity.trend === "down" ? "down from" : "level with";
 
   if (data.totalDone === 0 && data.totalMinutes === 0) {
@@ -110,14 +112,17 @@ export function StatsScreen() {
       <Rise>
         <section className="col" style={{ gap: 14 }}>
           <p className="title-sm">By area</p>
-          {data.cats.map((c) => {
+          {started.length === 0 && <p className="meta">Nothing started yet — start a session on anything and its area shows up here.</p>}
+          {started.map((c) => {
             const total = c.completed + c.pending;
             const pct = total ? (c.completed / total) * 100 : 0;
             return (
               <div key={c.id} className="col" style={{ gap: 6 }}>
-                <div className="row between">
-                  <span style={{ fontWeight: 500 }}>{c.name}</span>
-                  <span className="meta num">{c.completed}/{total} · {fmtMinutes(c.minutes)}</span>
+                <div className="row between" style={{ gap: 12 }}>
+                  <span className="truncate" style={{ fontWeight: 500 }}>{c.name}</span>
+                  <span className="meta num" style={{ flexShrink: 0 }}>
+                    {[`${c.completed} of ${total} done`, c.minutes > 0 && fmtMinutes(c.minutes)].filter(Boolean).join(" · ")}
+                  </span>
                 </div>
                 <div className="bar"><motion.i initial={{ width: 0 }} animate={{ width: `${pct}%` }} transition={{ ...easeOut, duration: 0.6 }} /></div>
               </div>
@@ -125,7 +130,12 @@ export function StatsScreen() {
           })}
           {neglected.length > 0 && (
             <p className="meta" style={{ color: "var(--warm)" }}>
-              Neglected: {neglected.slice(0, 3).map((c) => `${c.name} (${c.neglectedDays === 999 ? "never" : `${c.neglectedDays}d`})`).join(", ")}
+              Gone quiet: {neglected.slice(0, 3).map((c) => `${c.name} (${c.neglectedDays}d)`).join(", ")}
+            </p>
+          )}
+          {notStarted.length > 0 && (
+            <p className="meta">
+              Not started yet: {notStarted.map((c) => `${c.name} (${c.pending})`).join(", ")}
             </p>
           )}
         </section>

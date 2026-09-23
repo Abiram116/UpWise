@@ -56,13 +56,31 @@ interface Analysis {
 const slugify = (s: string) =>
   s.toLowerCase().normalize("NFKD").replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 40) || "general";
 
+// Category matching has to survive the AI phrasing the same area differently over months
+// ("LLM", "LLMs", "Large Language Models", "Cloud and DevOps" vs "Cloud & DevOps") — compare a
+// normalized key, not the raw slug, or the library slowly fills with near-duplicates.
+const CATEGORY_ALIASES: Record<string, string> = {
+  "language large model": "llm", "large language model": "llm", "augmented generation retrieval": "rag",
+  "algorithm data structure": "dsa", "learning machine": "machine learning", "ml": "machine learning",
+  "devop": "devops", "cloud devop": "cloud devops", "gen ai": "genai", "generative ai": "genai",
+};
+// Things a failed or lazy analysis tends to produce — never worth a category of their own.
+const JUNK_CATEGORIES = new Set(["error", "unknown", "other", "misc", "miscellaneous", "general", "uncategorized", "none", "na", "n a", "various", "random"]);
+function categoryKey(name: string): string {
+  const words = name.toLowerCase().replace(/&/g, " ").replace(/[^a-z0-9]+/g, " ").trim().split(" ")
+    .filter((w) => w && w !== "and" && w !== "the")
+    .map((w) => (w.length > 3 && w.endsWith("s") && !w.endsWith("ss") ? w.slice(0, -1) : w))
+    .sort().join(" ");
+  return CATEGORY_ALIASES[words] ?? words;
+}
+
 const clamp = (n: unknown, lo: number, hi: number, dflt: number) => {
   const v = Number(n);
   return Number.isFinite(v) ? Math.min(hi, Math.max(lo, Math.round(v))) : dflt;
 };
 
 function buildPrompt(meta: LinkMeta, note: string | undefined, goal: string, interests: string[],
-  categories: { name: string; slug: string }[], recentItems: { id: string; title: string }[]) {
+  categories: { name: string; slug: string; uses: number }[], recentItems: { id: string; title: string }[]) {
   const system = `You are UpWise, a learning coach for a final-year B.Tech student whose goal is: "${goal}".
 Their interests: ${interests.join(", ") || "not specified"}.
 You analyze saved content (YouTube videos, reels, articles) and return STRICT JSON only, matching this schema:
@@ -84,7 +102,7 @@ You analyze saved content (YouTube videos, reels, articles) and return STRICT JS
   "related_index": index number (from the ALREADY IN LIBRARY list below) of the one item this most directly builds on or connects to conceptually, or null if nothing clearly does
 }
 Rules:
-- Category: pick an existing one if it fits: ${categories.map((c) => `${c.name} (${c.slug})`).join(", ") || "none yet"}. Otherwise propose a new broad one (e.g. "RAG", "LLMs", "DSA", "System Design", "Cloud & DevOps", "Career", "Math for ML", "Python", "Frontend"). Never create near-duplicates.
+- Category = the learning AREA this belongs to, broad enough to hold many future items (a subject like "LLMs", "Docker", "DSA", "System Design", "Career"), never the specific topic of this one video. Existing areas, most used first: ${categories.map((c) => `${c.name} (${c.slug}, ${c.uses} items)`).join(", ") || "none yet"}. Reuse one whenever it reasonably fits — a new area only when this is genuinely a different subject.${categories.length >= 10 ? " There are already many areas: strongly prefer an existing one." : ""} Never a near-duplicate or synonym of an existing area, and never "General", "Other" or "Error".
 - estimated_minutes = realistic time to actually learn from it (skip intros/sponsors), not the raw video length.
 - segments only when a transcript exists and the content has clearly distinct parts. Max 5. Empty array otherwise.
 - resources only for real URLs found in the text. Empty array otherwise.
@@ -124,12 +142,15 @@ Deno.serve(async (req) => {
 
     const [profileRes, catRes, recentRes] = await Promise.all([
       supabase.from("profiles").select("goal, interests").eq("id", user.id).single(),
-      supabase.from("categories").select("id, name, slug").order("name"),
+      // With usage counts, so the prompt can offer the areas you actually use first.
+      supabase.from("categories").select("id, name, slug, items(count)"),
       supabase.from("items").select("id, title").not("title", "is", null).order("created_at", { ascending: false }).limit(25),
     ]);
     const goal = profileRes.data?.goal ?? "AI Engineer";
     const interests: string[] = profileRes.data?.interests ?? [];
-    const categories = catRes.data ?? [];
+    const categories = ((catRes.data ?? []) as { id: string; name: string; slug: string; items: { count: number }[] }[])
+      .map((c) => ({ id: c.id, name: c.name, slug: c.slug, uses: c.items?.[0]?.count ?? 0 }))
+      .sort((a, b) => b.uses - a.uses || a.name.localeCompare(b.name));
     const recentItems = (recentRes.data ?? []) as { id: string; title: string }[];
 
     // YouTube bot-checks datacenter IPs, so the app fetches the transcript from the device and sends it along.
@@ -192,14 +213,15 @@ Deno.serve(async (req) => {
       : null;
 
     let categoryId: string | null = null;
-    if (ai.category?.name) {
-      const slug = slugify(ai.category.slug || ai.category.name);
-      const match = categories.find((c) => c.slug === slug) ??
-        categories.find((c) => c.name.toLowerCase() === ai.category!.name.toLowerCase());
+    const proposed = !ai.error ? String(ai.category?.name ?? "").trim() : "";
+    if (proposed && !JUNK_CATEGORIES.has(categoryKey(proposed))) {
+      const slug = slugify(ai.category!.slug || proposed);
+      const key = categoryKey(proposed);
+      const match = categories.find((c) => c.slug === slug) ?? categories.find((c) => categoryKey(c.name) === key);
       if (match) categoryId = match.id;
       else {
         const { data: created } = await supabase.from("categories")
-          .upsert({ user_id: user.id, name: ai.category.name.trim().slice(0, 40), slug }, { onConflict: "user_id,slug" })
+          .upsert({ user_id: user.id, name: proposed.slice(0, 40), slug }, { onConflict: "user_id,slug" })
           .select("id").single();
         categoryId = created?.id ?? null;
       }
@@ -222,7 +244,8 @@ Deno.serve(async (req) => {
       // Name says "transcript" but this really means "had substantial source text to analyze from" —
       // covers article body text too, so the UI can show a trust badge when analysis worked from just a title.
       has_transcript: !!(meta.transcript || meta.content),
-      category_id: categoryId,
+      // A re-analysis that couldn't settle on a category keeps the one the item already has.
+      ...(categoryId || !reanalyzeId ? { category_id: categoryId } : {}),
       tags: (ai.tags ?? []).slice(0, 8).map((t) => String(t).toLowerCase().slice(0, 30)),
       ai: {
         summary: ai.summary ?? null,
