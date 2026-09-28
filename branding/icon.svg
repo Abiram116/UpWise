@@ -1,17 +1,14 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024">
-  <defs>
-    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" stop-color="#6D28D9"/>
-      <stop offset="100%" stop-color="#4338CA"/>
-    </linearGradient>
-  </defs>
+  <!-- UpWise owl: two eyes glancing up-right (curious, looking ahead), apricot beak, on sage -->
+  <rect x="0" y="0" width="1024" height="1024" rx="232" fill="#2F6A52"/>
 
-  <rect x="0" y="0" width="1024" height="1024" rx="224" fill="url(#bg)"/>
+  <circle cx="370" cy="480" r="136" fill="#F4EFE6"/>
+  <circle cx="396" cy="450" r="58" fill="#153A2B"/>
+  <circle cx="376" cy="428" r="17" fill="#F4EFE6"/>
 
-  <!-- single upward arrow, minimalist mark -->
-  <g stroke="#FFFFFF" stroke-width="84" stroke-linecap="round">
-    <line x1="348" y1="704" x2="565" y2="487"/>
-  </g>
-  <circle cx="348" cy="704" r="42" fill="#FFFFFF"/>
-  <polygon points="712,340 636,494 553,411" fill="#FFFFFF"/>
+  <circle cx="654" cy="480" r="136" fill="#F4EFE6"/>
+  <circle cx="680" cy="450" r="58" fill="#153A2B"/>
+  <circle cx="660" cy="428" r="17" fill="#F4EFE6"/>
+
+  <path d="M474 606 Q512 592 550 606 Q534 656 512 676 Q490 656 474 606 Z" fill="#E9A66B"/>
 </svg>
