@@ -6,7 +6,7 @@
 
 web
 
-(Tauri v2 webview shipped as a Windows desktop app and an Android APK. One UI codebase; the primary usage device is a Pixel 8, the secondary is a Windows laptop in a frameless window.)
+(Tauri v2 webview shipped as a Windows desktop app and an Android APK. One UI codebase; the primary usage device is a Pixel 11, the secondary is a Windows laptop in a frameless window.)
 
 ## Users
 
@@ -38,8 +38,8 @@ Not a bookmark manager and not a course app. It is a personal coach that already
 
 ## Brand Commitments
 
-- Name: UpWise. Icon: a single white ascending arrow on a violet→indigo gradient rounded square (branding/icon.svg). The arrow is the only mandated brand mark; the gradient is not required inside the app.
-- Voice: blunt but kind coach. Short sentences. No emoji in UI copy. Honest about low-value content.
+- Name: UpWise. Icon: an owl (two eyes glancing up-right, apricot beak) on a sage rounded square (branding/icon.svg). The owl is the only mandated brand mark.
+- Voice: a friend who's into the same stuff, not a coach or assistant. Casual, warm, one line at a time. No emoji in UI copy except the rare one that lands in a celebration. Honest about low-value content.
 - User-stated visual constraints (binding): Material You / Pixel-inspired tonal surfaces; soft, muted colours; dark theme and light theme; minimal; few boxes and borders; lighter typography; buttery animations; must not read as a generic AI-generated SaaS dashboard.
 
 ## Evidence on Hand

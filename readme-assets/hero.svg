@@ -9,10 +9,15 @@
   <!-- connecting flow -->
   <path d="M 260 150 L 400 150" stroke="#2f6a52" stroke-width="3" stroke-linecap="round" stroke-dasharray="2 14" opacity="0.45"/>
 
-  <!-- brand mark -->
-  <rect x="400" y="96" width="108" height="108" rx="32" fill="#cfe7da"/>
-  <path d="M 428 168 L 462 132" stroke="#0f3325" stroke-width="7" stroke-linecap="round"/>
-  <path d="M 440 131 L 464 131 L 464 155" stroke="#0f3325" stroke-width="7" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+  <!-- brand mark: the UpWise owl -->
+  <rect x="400" y="96" width="108" height="108" rx="32" fill="#2f6a52"/>
+  <circle cx="428" cy="140" r="15" fill="#f4efe6"/>
+  <circle cx="431" cy="137" r="6.4" fill="#153a2b"/>
+  <circle cx="428.5" cy="134.5" r="1.9" fill="#f4efe6"/>
+  <circle cx="480" cy="140" r="15" fill="#f4efe6"/>
+  <circle cx="483" cy="137" r="6.4" fill="#153a2b"/>
+  <circle cx="480.5" cy="134.5" r="1.9" fill="#f4efe6"/>
+  <path d="M 447 163 Q 454 160.4 461 163 Q 458 172.5 454 176 Q 450 172.5 447 163 Z" fill="#e9a66b"/>
 
   <!-- connecting flow -->
   <path d="M 508 150 L 620 150" stroke="#2f6a52" stroke-width="3" stroke-linecap="round" stroke-dasharray="2 14" opacity="0.45"/>
