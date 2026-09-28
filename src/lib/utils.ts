@@ -1,4 +1,4 @@
-import type { Item, ItemSource } from "./types";
+import type { Item, ItemFormat, ItemSource } from "./types";
 
 export function cx(...parts: (string | false | null | undefined)[]): string {
   return parts.filter(Boolean).join(" ");
@@ -87,6 +87,7 @@ export const STATUS_LABEL: Record<Item["status"], string> = {
   in_progress: "In progress",
   completed: "Done",
   skipped: "Skipped",
+  saved: "Saved link",
 };
 
 export const SOURCE_LABEL: Record<ItemSource, string> = {
@@ -105,9 +106,24 @@ export function pluralize(n: number, one: string, many = `${one}s`): string {
   return `${n} ${n === 1 ? one : many}`;
 }
 
-/** Honest-confidence signal: did the AI actually have real source text, or just a title? */
+/** Only worth flagging when the AI genuinely failed — "limited info" badges were noise. */
 export function confidence(item: Item): { label: string; tone: "warm" | "error" } | null {
-  if (item.ai?.error) return { label: "AI unavailable", tone: "error" };
-  if (!item.has_transcript) return { label: "Limited info", tone: "warm" };
+  if (item.ai?.error && item.ai?.format !== "link") return { label: "AI unavailable", tone: "error" };
   return null;
 }
+
+/** Items saved before formats existed fall back to what the URL says. */
+export function formatOf(item: Pick<Item, "ai" | "source" | "url" | "duration_seconds" | "status">): ItemFormat {
+  if (item.ai?.format) return item.ai.format;
+  if (item.status === "saved") return "link";
+  if (item.source === "youtube") return /\/shorts\//.test(item.url) || (item.duration_seconds != null && item.duration_seconds <= 180) ? "short" : "video";
+  if (item.source === "instagram") return /instagram\.com\/p\//.test(item.url) ? "post" : "reel";
+  return "article";
+}
+
+export const FORMAT_LABEL: Record<ItemFormat, string> = {
+  video: "Video", short: "Short", reel: "Reel", post: "Post", article: "Article", link: "Link",
+};
+
+/** Anything you watch/listen to (so a transcript and "worth watching" parts can exist). */
+export const isWatchable = (f: ItemFormat) => f === "video" || f === "short" || f === "reel";

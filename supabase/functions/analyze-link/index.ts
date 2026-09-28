@@ -1,6 +1,6 @@
 import { AuthError, corsHeaders, json, userClient } from "../_shared/auth.ts";
-import { fetchArticle, fetchInstagram, fetchYouTube, type LinkMeta, parseLink } from "../_shared/links.ts";
-import { groqJson, groqTranscribe, MODELS } from "../_shared/groq.ts";
+import { classifyPage, fetchArticle, fetchInstagram, fetchYouTube, type LinkMeta, parseLink } from "../_shared/links.ts";
+import { groqJson, groqTranscribe } from "../_shared/groq.ts";
 
 const MAX_VIDEO_BYTES = 20_000_000; // Groq's transcription upload cap is 25MB; leave headroom.
 
@@ -37,20 +37,14 @@ function titleSimilarity(a: string, b: string): number {
 
 interface Analysis {
   title: string;
-  summary: string;
+  gist: string;
   key_concepts: string[];
   category: { name: string; slug: string };
   tags: string[];
   difficulty: "beginner" | "intermediate" | "advanced";
-  prerequisites: string[];
   relevance_score: number;
-  why_it_matters: string;
   estimated_minutes: number;
-  takeaway: string | null;
   segments: { start: string; end: string; label: string }[];
-  resources: { title: string; url: string }[];
-  overlap: string | null;
-  related_index: number | null;
 }
 
 const slugify = (s: string) =>
@@ -80,33 +74,27 @@ const clamp = (n: unknown, lo: number, hi: number, dflt: number) => {
 };
 
 function buildPrompt(meta: LinkMeta, note: string | undefined, goal: string, interests: string[],
-  categories: { name: string; slug: string; uses: number }[], recentItems: { id: string; title: string }[]) {
-  const system = `You are UpWise, a learning coach for a final-year B.Tech student whose goal is: "${goal}".
-Their interests: ${interests.join(", ") || "not specified"}.
-You analyze saved content (YouTube videos, reels, articles) and return STRICT JSON only, matching this schema:
+  categories: { name: string; slug: string; uses: number }[]) {
+  // Lean on purpose: the app shows a title, one line and a few chips. Every field not shown is
+  // tokens (and rate limit) spent for nothing.
+  const system = `You triage saved learning content for a final-year B.Tech student aiming for "${goal}" (interests: ${interests.join(", ") || "not specified"}).
+Return STRICT JSON only:
 {
-  "title": "clean title without clickbait or emojis",
-  "summary": "2-3 plain sentences: what it teaches and how",
-  "key_concepts": ["3-6 concrete concepts/tools covered"],
-  "category": {"name": "Short Category Name", "slug": "short-category-name"},
-  "tags": ["<=6 lowercase tags"],
+  "title": "clean, specific title — no clickbait, no emojis, <=80 chars",
+  "gist": "ONE plain line, <=110 chars: what you actually get from it",
+  "key_concepts": ["3-5 concrete concepts/tools"],
+  "category": {"name": "Area Name", "slug": "area-name"},
+  "tags": ["<=5 lowercase tags"],
   "difficulty": "beginner|intermediate|advanced",
-  "prerequisites": ["0-3 things they should already know"],
   "relevance_score": 1-5,
-  "why_it_matters": "one sentence tying this to the goal (interviews, portfolio, real skills). Be honest if it's low value.",
   "estimated_minutes": number,
-  "takeaway": "If the transcript alone teaches the point well enough to skip watching, write the 3-5 line lesson here. Otherwise null.",
-  "segments": [{"start":"mm:ss","end":"mm:ss","label":"what this part covers"}],
-  "resources": [{"title":"...","url":"..."}],
-  "overlap": "If it duplicates or extends something already in the library, say which and how. Otherwise null.",
-  "related_index": index number (from the ALREADY IN LIBRARY list below) of the one item this most directly builds on or connects to conceptually, or null if nothing clearly does
+  "segments": [{"start":"mm:ss","end":"mm:ss","label":"<=6 words"}]
 }
 Rules:
-- Category = the learning AREA this belongs to, broad enough to hold many future items (a subject like "LLMs", "Docker", "DSA", "System Design", "Career"), never the specific topic of this one video. Existing areas, most used first: ${categories.map((c) => `${c.name} (${c.slug}, ${c.uses} items)`).join(", ") || "none yet"}. Reuse one whenever it reasonably fits — a new area only when this is genuinely a different subject.${categories.length >= 10 ? " There are already many areas: strongly prefer an existing one." : ""} Never a near-duplicate or synonym of an existing area, and never "General", "Other" or "Error".
-- estimated_minutes = realistic time to actually learn from it (skip intros/sponsors), not the raw video length.
-- segments only when a transcript exists and the content has clearly distinct parts. Max 5. Empty array otherwise.
-- resources only for real URLs found in the text. Empty array otherwise.
-- If the content is unclear (login-walled reel, no transcript), infer from title/note and lower confidence via relevance_score, do not invent details.`;
+- category = the learning AREA (broad: "LLMs", "Docker", "DSA", "System Design", "Career"), never this item's specific topic. Existing areas, most used first: ${categories.map((c) => `${c.name} (${c.slug}, ${c.uses})`).join(", ") || "none yet"}. Reuse one whenever it reasonably fits.${categories.length >= 10 ? " There are many already: strongly prefer an existing one." : ""} Never a synonym of an existing area; never "General", "Other" or "Error".
+- estimated_minutes = realistic time to learn it (skip intros/sponsors). Shorts and reels are 1-3.
+- segments only for videos over 10 minutes with a transcript and clearly distinct parts, max 5. Otherwise [].
+- If there's little to go on (login-walled reel, no transcript), infer from title/note, keep relevance_score low, don't invent details.`;
 
   const parts: string[] = [];
   parts.push(`SOURCE: ${meta.source}\nURL: ${meta.canonicalUrl}`);
@@ -116,10 +104,11 @@ Rules:
   if (meta.tags.length) parts.push(`CREATOR TAGS: ${meta.tags.join(", ")}`);
   if (note) parts.push(`USER NOTE: ${note}`);
   if (meta.description) parts.push(`DESCRIPTION:\n${meta.description.slice(0, 2500)}`);
-  if (meta.transcript) parts.push(`TRANSCRIPT (may be truncated):\n${meta.transcript.slice(0, 12_000)}`);
-  else if (meta.content) parts.push(`CONTENT (may be truncated):\n${meta.content.slice(0, 12_000)}`);
+  // ~2.5k tokens of source is plenty for a title-and-gist triage; the start and end of a long
+  // transcript carry the intro (what it's about) and the wrap-up (what it concluded).
+  const text = meta.transcript ?? meta.content;
+  if (text) parts.push(`${meta.transcript ? "TRANSCRIPT" : "CONTENT"} (excerpt):\n${text.length > 10_000 ? `${text.slice(0, 7_500)}\n[…]\n${text.slice(-2_500)}` : text}`);
   else parts.push("NO TRANSCRIPT/CONTENT AVAILABLE.");
-  if (recentItems.length) parts.push(`ALREADY IN LIBRARY (recent):\n${recentItems.map((r, i) => `[${i}] ${r.title}`).join("\n")}`);
   return { system, user: parts.join("\n\n") };
 }
 
@@ -140,18 +129,16 @@ Deno.serve(async (req) => {
       .eq("canonical_url", parsed.canonicalUrl).maybeSingle();
     if (existing && existing.id !== reanalyzeId) return json({ duplicate: true, item: existing });
 
-    const [profileRes, catRes, recentRes] = await Promise.all([
+    const [profileRes, catRes] = await Promise.all([
       supabase.from("profiles").select("goal, interests").eq("id", user.id).single(),
       // With usage counts, so the prompt can offer the areas you actually use first.
       supabase.from("categories").select("id, name, slug, items(count)"),
-      supabase.from("items").select("id, title").not("title", "is", null).order("created_at", { ascending: false }).limit(25),
     ]);
     const goal = profileRes.data?.goal ?? "AI Engineer";
     const interests: string[] = profileRes.data?.interests ?? [];
     const categories = ((catRes.data ?? []) as { id: string; name: string; slug: string; items: { count: number }[] }[])
       .map((c) => ({ id: c.id, name: c.name, slug: c.slug, uses: c.items?.[0]?.count ?? 0 }))
       .sort((a, b) => b.uses - a.uses || a.name.localeCompare(b.name));
-    const recentItems = (recentRes.data ?? []) as { id: string; title: string }[];
 
     // YouTube bot-checks datacenter IPs, so the app fetches the transcript from the device and sends it along.
     const clientTranscript: string | undefined =
@@ -167,20 +154,30 @@ Deno.serve(async (req) => {
     }
     else meta = await fetchArticle(parsed.canonicalUrl);
 
+    // What is it? Shorts/reels/posts/videos come from the URL and length; everything else is
+    // an article worth reading, or a plain link (site, tool, repo) that's just kept, no AI.
+    const rawPath = (() => { try { return new URL(rawUrl).pathname; } catch { return ""; } })();
+    const mode: "learn" | "link" | undefined = body.mode === "learn" || body.mode === "link" ? body.mode : undefined;
+    meta.format = parsed.source === "youtube"
+      ? (/^\/shorts\//.test(rawPath) || (meta.durationSeconds != null && meta.durationSeconds <= 180) ? "short" : "video")
+      : parsed.source === "instagram" ? (/^\/p\//.test(rawPath) ? "post" : "reel")
+      : mode === "learn" ? "article" : mode === "link" ? "link" : classifyPage(meta);
+    const isLink = meta.format === "link";
+
     // A re-analyze that comes back with absolutely nothing (no title, no thumbnail, no
     // content) for a link that previously had real data is the strongest signal available
     // that it's been deleted/removed — skip the pointless Groq call and say so plainly.
-    const seemsDead = !!reanalyzeId && !meta.title && !meta.thumbnailUrl && !meta.transcript && !meta.content;
+    const seemsDead = !!reanalyzeId && !isLink && !meta.title && !meta.thumbnailUrl && !meta.transcript && !meta.content;
 
     let ai: Partial<Analysis> & { model?: string; error?: string } = {};
-    if (seemsDead) {
+    if (isLink) {
+      // Kept as a bookmark: title/description/thumbnail from the page itself is all it needs.
+    } else if (seemsDead) {
       ai = { error: "This link looks like it's been removed or is no longer accessible." };
     } else {
       try {
-        const { system, user: userMsg } = buildPrompt(meta, note, goal, interests, categories, recentItems);
-        const model = MODELS.analyze();
-        ai = await groqJson<Analysis>({ model, system, user: userMsg });
-        ai.model = model;
+        const { system, user: userMsg } = buildPrompt(meta, note, goal, interests, categories);
+        ai = await groqJson<Analysis>({ job: "analyze", system, user: userMsg, maxTokens: 700 });
       } catch (e) {
         ai = { error: (e as Error).message };
       }
@@ -191,7 +188,7 @@ Deno.serve(async (req) => {
     // same video/article re-shared under a different link.
     let possibleDuplicate: { id: string; title: string } | null = null;
     const candidateTitle = ai.title || meta.title || "";
-    if (!reanalyzeId && candidateTitle) {
+    if (!reanalyzeId && candidateTitle && !isLink) {
       const { data: candidates } = await supabase.from("items")
         .select("id, title, channel, duration_seconds")
         .eq("source", parsed.source).not("title", "is", null).limit(500);
@@ -208,12 +205,8 @@ Deno.serve(async (req) => {
       if (best) possibleDuplicate = { id: best.id, title: best.title };
     }
 
-    const relatedItem = typeof ai.related_index === "number" && recentItems[ai.related_index]
-      ? { id: recentItems[ai.related_index].id, title: recentItems[ai.related_index].title }
-      : null;
-
     let categoryId: string | null = null;
-    const proposed = !ai.error ? String(ai.category?.name ?? "").trim() : "";
+    const proposed = !ai.error && !isLink ? String(ai.category?.name ?? "").trim() : "";
     if (proposed && !JUNK_CATEGORIES.has(categoryKey(proposed))) {
       const slug = slugify(ai.category!.slug || proposed);
       const key = categoryKey(proposed);
@@ -237,34 +230,26 @@ Deno.serve(async (req) => {
       channel: meta.channel,
       thumbnail_url: meta.thumbnailUrl,
       duration_seconds: meta.durationSeconds,
-      // Articles have no separate "transcript" concept — this column just means "the text we
-      // actually read," so reuse it for article body text too instead of leaving it empty
-      // even though the AI clearly had real content to work from (has_transcript was true).
-      transcript: meta.transcript ?? meta.content,
-      // Name says "transcript" but this really means "had substantial source text to analyze from" —
-      // covers article body text too, so the UI can show a trust badge when analysis worked from just a title.
-      has_transcript: !!(meta.transcript || meta.content),
+      // The text we read (transcript, or article body) — kept for full-text search. Only real
+      // spoken transcripts count as "has transcript"; articles aren't shown one.
+      transcript: isLink ? null : meta.transcript ?? meta.content,
+      has_transcript: !!meta.transcript,
       // A re-analysis that couldn't settle on a category keeps the one the item already has.
       ...(categoryId || !reanalyzeId ? { category_id: categoryId } : {}),
       tags: (ai.tags ?? []).slice(0, 8).map((t) => String(t).toLowerCase().slice(0, 30)),
       ai: {
-        summary: ai.summary ?? null,
-        key_concepts: ai.key_concepts ?? [],
+        format: meta.format,
+        summary: ai.gist ?? null,
+        key_concepts: (ai.key_concepts ?? []).slice(0, 5),
         difficulty: ai.difficulty ?? null,
-        prerequisites: ai.prerequisites ?? [],
-        why_it_matters: ai.why_it_matters ?? null,
-        takeaway: ai.takeaway ?? null,
-        segments: (ai.segments ?? []).slice(0, 5),
-        resources: (ai.resources ?? []).slice(0, 8),
-        overlap: ai.overlap ?? null,
+        segments: meta.format === "video" ? (ai.segments ?? []).slice(0, 5) : [],
         model: ai.model ?? null,
         error: ai.error ?? null,
         transcript_status: meta.transcriptStatus ?? null,
         possible_duplicate: possibleDuplicate,
-        related_item: relatedItem,
       },
       relevance_score: ai.relevance_score ? clamp(ai.relevance_score, 1, 5, 3) : null,
-      estimated_minutes: clamp(ai.estimated_minutes, 1, 600, fallbackMinutes),
+      estimated_minutes: isLink ? null : clamp(ai.estimated_minutes, 1, 600, fallbackMinutes),
     };
 
     // Re-analyzing an existing item refreshes its content without resetting its status/progress
@@ -274,11 +259,12 @@ Deno.serve(async (req) => {
     // record that it couldn't be read this time.
     const { error: insertErr, data: item } = reanalyzeId
       ? await supabase.from("items")
-        .update(seemsDead ? { ai: { ...(existing?.ai ?? {}), error: ai.error } } : refreshed)
+        .update(seemsDead ? { ai: { ...(existing?.ai ?? {}), error: ai.error } }
+          : { ...refreshed, ...(mode === "link" ? { status: "saved" } : mode === "learn" ? { status: "inbox" } : {}) })
         .eq("id", reanalyzeId)
         .select("*, category:categories(id, name, slug, color)").single()
       : await supabase.from("items").insert({
-        user_id: user.id, url: rawUrl.trim(), status: "inbox", notes: note ?? null, added_via: addedVia, ...refreshed,
+        user_id: user.id, url: rawUrl.trim(), status: isLink ? "saved" : "inbox", notes: note ?? null, added_via: addedVia, ...refreshed,
       }).select("*, category:categories(id, name, slug, color)").single();
 
     if (insertErr) return json({ error: insertErr.message }, 500);

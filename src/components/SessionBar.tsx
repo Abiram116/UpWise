@@ -4,6 +4,7 @@ import { AnimatePresence, motion } from "motion/react";
 import { Check, Square } from "lucide-react";
 import { endSession, invalidateProgress, setItemStatus, startSession } from "../lib/api";
 import { describeError } from "../lib/errors";
+import { celebrateDone } from "./Celebrate";
 import { getPref, setPref } from "../lib/store";
 import type { Item } from "../lib/types";
 import { Pill, spring, useToast } from "./ui";
@@ -49,7 +50,7 @@ const sessionStore = {
     await endSession(a.sessionId, a.startedAt);
     active = null; emit();
     await setPref("activeSession", null);
-    if (complete) await setItemStatus(a.itemId, "completed");
+    if (complete) { await setItemStatus(a.itemId, "completed"); celebrateDone(a.title); }
     invalidateProgress();
   },
 };

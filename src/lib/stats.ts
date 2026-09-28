@@ -1,5 +1,5 @@
 import type { DailyActivity, Item, LearningSession, Profile } from "./types";
-import { isoDay, pluralize } from "./utils";
+import { isoDay } from "./utils";
 
 export function isOnBreak(settings: Profile["settings"] | undefined, today = isoDay()): boolean {
   const until = settings?.break_until;
@@ -113,14 +113,6 @@ export function backlogHealth(items: Item[], weeks: WeekStat[]) {
   };
 }
 
-/** Items sitting untouched for a while — never started, still inbox/queued. Oldest first. */
-export function neglectedItems(items: Item[], days = 14): Item[] {
-  const cutoff = Date.now() - days * 86400e3;
-  return items
-    .filter((i) => (i.status === "inbox" || i.status === "queued") && !i.started_at && new Date(i.created_at).getTime() < cutoff)
-    .sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
-}
-
 export interface CategoryStat {
   id: string; name: string;
   completed: number; pending: number; minutes: number;
@@ -151,7 +143,7 @@ export function byCategory(items: Item[], sessions: LearningSession[]): Category
   }
   const map = new Map<string, CategoryStat>();
   for (const i of items) {
-    if (i.status === "skipped") continue; // skipped says nothing about what you're learning
+    if (i.status === "skipped" || i.status === "saved") continue; // neither says anything about what you're learning
     const key = i.category?.id ?? "none";
     const c = map.get(key) ?? {
       id: key, name: i.category?.name ?? "Other", completed: 0, pending: 0, minutes: 0,
@@ -182,39 +174,6 @@ export function byCategory(items: Item[], sessions: LearningSession[]): Category
     (b.lastActive ?? "").localeCompare(a.lastActive ?? "") ||
     b.minutes + b.completed * 20 - (a.minutes + a.completed * 20) ||
     b.pending - a.pending);
-}
-
-export interface SkillGroup { category: string; completed: number; minutes: number; concepts: string[] }
-
-/** Completed items grouped by category with deduplicated AI-extracted concepts — the raw material for a resume/portfolio export. */
-export function skillsSummary(items: Item[], sessions: LearningSession[]): SkillGroup[] {
-  const secondsByItem = new Map<string, number>();
-  for (const s of sessions) if (s.item_id) secondsByItem.set(s.item_id, (secondsByItem.get(s.item_id) ?? 0) + s.seconds);
-  const map = new Map<string, SkillGroup>();
-  for (const i of items) {
-    if (i.status !== "completed") continue;
-    const name = i.category?.name ?? "Uncategorized";
-    const g = map.get(name) ?? { category: name, completed: 0, minutes: 0, concepts: [] };
-    g.completed++;
-    g.minutes += Math.round((secondsByItem.get(i.id) ?? 0) / 60);
-    for (const c of i.ai?.key_concepts ?? []) {
-      const norm = c.trim();
-      if (norm && !g.concepts.some((x) => x.toLowerCase() === norm.toLowerCase())) g.concepts.push(norm);
-    }
-    map.set(name, g);
-  }
-  return [...map.values()].sort((a, b) => b.completed - a.completed);
-}
-
-export function formatSkillsExport(groups: SkillGroup[], goal: string, name?: string | null): string {
-  const header = `${name ? `${name} — ` : ""}${goal} Learning Summary\nGenerated ${new Date().toLocaleDateString(undefined, { year: "numeric", month: "long", day: "numeric" })}`;
-  if (!groups.length) return `${header}\n\nNothing completed yet.`;
-  const body = groups.map((g) => {
-    const time = g.minutes >= 60 ? `${(g.minutes / 60).toFixed(1)}h` : `${g.minutes}min`;
-    const concepts = g.concepts.length ? `\nKey concepts: ${g.concepts.join(", ")}` : "";
-    return `${g.category} (${pluralize(g.completed, "item")} completed, ${time})${concepts}`;
-  }).join("\n\n");
-  return `${header}\n\n${body}`;
 }
 
 export function todayMinutes(activity: DailyActivity[]): number {

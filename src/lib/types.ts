@@ -1,4 +1,6 @@
-export type ItemStatus = "inbox" | "queued" | "in_progress" | "completed" | "skipped";
+export type ItemStatus = "inbox" | "queued" | "in_progress" | "completed" | "skipped" | "saved";
+/** What kind of thing it is. "link" = a site/tool kept as a bookmark, no AI. */
+export type ItemFormat = "video" | "short" | "reel" | "post" | "article" | "link";
 export type ItemSource = "youtube" | "instagram" | "article" | "other";
 
 export interface Category {
@@ -9,6 +11,7 @@ export interface Category {
 }
 
 export interface ItemAI {
+  format: ItemFormat;
   summary: string | null;
   key_concepts: string[];
   difficulty: "beginner" | "intermediate" | "advanced" | null;
@@ -97,6 +100,10 @@ export interface DailyActivity {
 export interface CoachResult {
   pick_item_id: string | null;
   next_item_ids?: string[];
+  /** The friend line shown on Today. */
+  line?: string;
+  /** Situation it was written for — a different situation means it's time for a new line. */
+  sig?: string;
   headline: string;
   message: string;
   reason: string;

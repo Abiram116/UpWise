@@ -1,10 +1,11 @@
 import { Suspense, useEffect, useState } from "react";
 import { NavLink, Outlet, useLocation, useNavigate } from "react-router";
 import { AnimatePresence, motion } from "motion/react";
-import { ArrowUpRight, BarChart3, Home, Library, Plus, Settings } from "lucide-react";
+import { BarChart3, Home, Library, Plus, Settings } from "lucide-react";
 import { AddSheet, useAddQueue } from "./AddSheet";
 import { SessionBar } from "./SessionBar";
 import { ConnectionBanner } from "./ConnectionBanner";
+import { Owl } from "./BrandMark";
 import { useBackHandler } from "../lib/backHandler";
 import { onShare } from "../lib/share";
 import { extractUrl } from "../lib/utils";
@@ -62,7 +63,7 @@ export function AppShell() {
   return (
     <div className="app">
       <aside className="rail">
-        <div className="rail-brand"><ArrowUpRight size={18} strokeWidth={2.75} /></div>
+        <div className="rail-brand"><Owl size={40} /></div>
         <motion.button className="rail-fab" aria-label="Add link" onClick={() => setAddOpen(true)} whileTap={{ scale: 0.94 }} transition={spring}>
           <Plus size={24} strokeWidth={2.2} />
         </motion.button>

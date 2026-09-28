@@ -71,7 +71,7 @@ export function Chip({ children, tone, active, onClick, className }: {
 }) {
   if (onClick) {
     return (
-      <motion.button whileTap={{ scale: 0.95 }} transition={spring} className={cx("chip chip-btn", className)} data-active={active} onClick={() => { haptic.tap(); onClick(); }}>
+      <motion.button whileTap={{ scale: 0.95 }} transition={spring} className={cx("chip chip-btn", className)} data-active={active} onClick={() => { haptic.select(); onClick(); }}>
         {active && <Check size={14} strokeWidth={2.5} />}{children}
       </motion.button>
     );
@@ -84,7 +84,7 @@ export function Dots({ n, of = 5 }: { n: number | null; of?: number }) {
 }
 
 export function Switch({ on, onChange, label }: { on: boolean; onChange: (v: boolean) => void; label?: string }) {
-  return <button role="switch" aria-checked={on} aria-label={label} className="switch" data-on={on} onClick={() => { haptic.tap(); onChange(!on); }} />;
+  return <button role="switch" aria-checked={on} aria-label={label} className="switch" data-on={on} onClick={() => { haptic.select(); onChange(!on); }} />;
 }
 
 export function Segmented<T extends string>({ value, onChange, options }: { value: T; onChange: (v: T) => void; options: { value: T; label: string }[] }) {

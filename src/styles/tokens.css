@@ -113,3 +113,23 @@
 
   --shadow-float: 0 12px 32px rgba(0, 0, 0, 0.45), 0 2px 8px rgba(0, 0, 0, 0.3);
 }
+
+/* Material You: the phone's wallpaper palette (pushed from MainActivity as --dyn-*). Accents
+   only — surfaces keep UpWise's calm neutrals so text contrast never depends on a wallpaper. */
+:root[data-palette="wallpaper"] {
+  --primary: var(--dyn-a1-600); --on-primary: #ffffff;
+  --primary-container: var(--dyn-a1-100); --on-primary-container: var(--dyn-a1-900);
+  --warm: var(--dyn-a3-600); --warm-container: var(--dyn-a3-100); --on-warm-container: var(--dyn-a3-900);
+}
+@media (prefers-color-scheme: dark) {
+  :root[data-palette="wallpaper"]:not([data-theme="light"]) {
+    --primary: var(--dyn-a1-200); --on-primary: var(--dyn-a1-800);
+    --primary-container: var(--dyn-a1-700); --on-primary-container: var(--dyn-a1-100);
+    --warm: var(--dyn-a3-200); --warm-container: var(--dyn-a3-700); --on-warm-container: var(--dyn-a3-100);
+  }
+}
+:root[data-palette="wallpaper"][data-theme="dark"] {
+  --primary: var(--dyn-a1-200); --on-primary: var(--dyn-a1-800);
+  --primary-container: var(--dyn-a1-700); --on-primary-container: var(--dyn-a1-100);
+  --warm: var(--dyn-a3-200); --warm-container: var(--dyn-a3-700); --on-warm-container: var(--dyn-a3-100);
+}

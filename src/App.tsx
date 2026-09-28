@@ -15,11 +15,14 @@ import { ErrorState, useToast } from "./components/ui";
 import { AppShell } from "./components/AppShell";
 import { WindowControls } from "./components/WindowControls";
 import { Spinner } from "./components/ui";
-import { HomeScreen, useCoach } from "./screens/Home";
+import { HomeScreen } from "./screens/Home";
+import { useCoach } from "./lib/coach";
+import { CelebrationLayer, celebrate } from "./components/Celebrate";
+import { queryClient } from "./lib/queryClient";
+import type { Item } from "./lib/types";
 import { WhatsNewGate } from "./components/WhatsNew";
 import { useSessionStore } from "./components/SessionBar";
 import { breakDaySet, streak, todayMinutes } from "./lib/stats";
-import { haptic } from "./lib/haptics";
 import "./lib/android-bridge";
 
 // Home is the one screen almost every cold start needs immediately — everything else is
@@ -81,6 +84,7 @@ function Gate() {
       <Background />
       <GlobalErrors />
       <Celebrations />
+      <CelebrationLayer />
       <Routes>
         <Route element={<AppShell />}>
           <Route path="/" element={<HomeScreen />} />
@@ -152,48 +156,49 @@ function Background() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [profile.data, items.data, sessions.data, activity.data, goalMet]);
 
+  // Notification taps and buttons, delivered by MainActivity (window.__upwiseNotif). The
+  // payload is { action, notification: { title, body, extra: { itemId } } } — the old code read
+  // `extra`/`title` off the top level, found nothing, and every button just opened the app.
   useEffect(() => {
     if (!isTauri) return;
-    let off: (() => void) | undefined;
-    import("@tauri-apps/plugin-notification").then(({ onAction }) => {
-      onAction((n) => {
-        // The plugin's TS types don't declare `actionId`, but the native side always sends it -
-        // "tap" for the notification body itself, or the pressed action button's own id.
-        const payload = n as typeof n & { actionId?: string };
-        const itemId = (payload.extra as { itemId?: string } | undefined)?.itemId || null;
-        void markNotificationOpened(payload.title);
-
-        // itemsRef may still be undefined on a cold start (tapped from a killed-app notification
-        // before Background's query resolves) — default to trusting the notification in that
-        // case, and only actively block once we have fresh data proving it's stale.
-        const loaded = itemsRef.current !== undefined;
-        const current = itemId ? itemsRef.current?.find((i) => i.id === itemId) : undefined;
-        const knownGone = loaded && itemId && !current;
-        const knownResolved = current?.status === "completed" || current?.status === "skipped";
-        const action = payload.actionId === "snooze" ? "later" : payload.actionId;
-        // Android can only deliver a button tap by opening the app — for the "not now" answers,
-        // do the thing and step straight back out of the way.
-        const backToWhatYouWereDoing = () => window.AndroidNative?.moveToBackground?.();
-        if (action === "skip") {
-          if (itemId && !knownGone && !knownResolved) void setStatus(itemId, "skipped").catch(() => {});
-          backToWhatYouWereDoing();
-          return;
+    type Payload = { action?: string; notification?: { title?: string; body?: string; extra?: { itemId?: string } } };
+    const handle = (p: Payload) => {
+      const n = p.notification ?? {};
+      const itemId = n.extra?.itemId || null;
+      const title = n.title ?? "", body = n.body ?? "";
+      // Items may still be loading on a cold start — the persisted cache usually has them.
+      const all = itemsRef.current ?? queryClient.getQueryData<Item[]>(["items"]);
+      const current = itemId ? all?.find((i) => i.id === itemId) : undefined;
+      const knownGone = !!all && !!itemId && !current;
+      const resolved = current?.status === "completed" || current?.status === "skipped";
+      const action = p.action === "snooze" ? "later" : p.action;
+      // Android can only deliver a button tap by opening the app — for the "not now" answers,
+      // do the thing and step straight back out of the way.
+      const back = () => window.AndroidNative?.moveToBackground?.();
+      if (action === "skip") {
+        if (itemId && !knownGone && !resolved) {
+          setStatus(itemId, "skipped").then(() => toast("Skipped"), () => toast("Couldn't skip it — try from the app"));
         }
-        if (action === "later" || action === "tomorrow") {
-          void snoozeNotification(payload.title, payload.body ?? "", itemId, action);
-          backToWhatYouWereDoing();
-          return;
-        }
-        if (action === "start" && current && !knownResolved) {
-          void startSession(current).catch(() => {});
-          nav(`/item/${current.id}`);
-          return;
-        }
-        nav(itemId && !knownGone ? `/item/${itemId}` : "/");
-      }).then((l) => { off = () => l.unregister(); });
-    }).catch(() => {});
-    return () => off?.();
-  }, [nav, setStatus, startSession]);
+        back();
+        return;
+      }
+      if (action === "later" || action === "tomorrow") {
+        void snoozeNotification(title, body, itemId, action).finally(back);
+        return;
+      }
+      void markNotificationOpened(title);
+      if (action === "start" && current && !resolved) {
+        startSession(current).catch(() => {});
+        nav(`/item/${current.id}`);
+        return;
+      }
+      nav(itemId && !knownGone ? `/item/${itemId}` : "/");
+    };
+    const w = window as typeof window & { __upwiseNotif?: (p: Payload) => void; __upwisePendingNotif?: Payload };
+    w.__upwiseNotif = handle;
+    if (w.__upwisePendingNotif) { const pending = w.__upwisePendingNotif; w.__upwisePendingNotif = undefined; handle(pending); }
+    return () => { if (w.__upwiseNotif === handle) w.__upwiseNotif = undefined; };
+  }, [nav, setStatus, startSession, toast]);
 
   return null;
 }
@@ -206,7 +211,6 @@ function Celebrations() {
   const profile = useProfile();
   const items = useItems();
   const activity = useActivity(14);
-  const toast = useToast();
   const pendingCount = items.data?.filter((i) => i.status === "inbox" || i.status === "queued" || i.status === "in_progress").length;
   const prevPending = useRef<number | undefined>(undefined);
 
@@ -219,8 +223,7 @@ function Celebrations() {
     (async () => {
       if (mins >= target && (await getPref("celebratedGoal", "")) !== day) {
         await setPref("celebratedGoal", day);
-        haptic.success();
-        toast(`Today's goal done — ${mins} min learned.${st > 1 ? ` ${st}-day streak.` : ""}`, undefined, { tone: "celebrate" });
+        void celebrate({ kind: "goal", minutes: mins, streak: st });
         return;
       }
       const milestone = [...STREAK_MILESTONES].reverse().find((m) => st >= m) ?? 0;
@@ -229,20 +232,16 @@ function Celebrations() {
       if (milestone < celebrated) { await setPref("celebratedStreak", milestone); return; }
       if (milestone && celebrated < milestone) {
         await setPref("celebratedStreak", milestone);
-        haptic.success();
-        toast(`${milestone}-day streak. That's a habit now.`, undefined, { tone: "celebrate" });
+        void celebrate({ kind: "streak", streak: milestone });
       }
     })();
-  }, [profile.data, activity.data, toast]);
+  }, [profile.data, activity.data]);
 
   useEffect(() => {
     if (pendingCount === undefined) return;
-    if (prevPending.current && prevPending.current > 0 && pendingCount === 0) {
-      haptic.success();
-      toast("Backlog cleared — everything you saved is learned or sorted.", undefined, { tone: "celebrate" });
-    }
+    if (prevPending.current && prevPending.current > 0 && pendingCount === 0) void celebrate({ kind: "cleared" });
     prevPending.current = pendingCount;
-  }, [pendingCount, toast]);
+  }, [pendingCount]);
 
   return null;
 }

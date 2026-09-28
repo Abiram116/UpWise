@@ -23,7 +23,7 @@ export function lean(item: Item): Item {
 
 export async function analyzeLink(
   url: string,
-  opts: { note?: string; addedVia?: "paste" | "share"; onStage?: (s: AnalyzeStage) => void; reanalyzeId?: string } = {},
+  opts: { note?: string; addedVia?: "paste" | "share"; onStage?: (s: AnalyzeStage) => void; reanalyzeId?: string; mode?: "learn" | "link" } = {},
 ): Promise<{ item: Item; duplicate: boolean; ai_error: string | null }> {
   let transcript: string | undefined;
   const vid = youtubeId(url);
@@ -39,7 +39,7 @@ export async function analyzeLink(
   const stageTimer = setTimeout(() => opts.onStage?.("thinking"), 1500);
   try {
     const res = await supabase.functions.invoke("analyze-link", {
-      body: { url, note: opts.note, added_via: opts.addedVia ?? "paste", transcript, reanalyze_id: opts.reanalyzeId },
+      body: { url, note: opts.note, added_via: opts.addedVia ?? "paste", transcript, reanalyze_id: opts.reanalyzeId, mode: opts.mode },
     });
     if (res.error) {
       // A non-2xx carries the function's own human-written message; surface that instead of

@@ -1,11 +1,13 @@
 // Single source of truth for the JS<->Kotlin bridge shape (MainActivity.kt's NativeBridge).
 // Anything touching window.AndroidNative should rely on this instead of re-declaring the type.
-export {};
+export type HapticType = "tap" | "select" | "success" | "warn" | "celebrate" | "spin";
+
 declare global {
   interface Window {
     AndroidNative?: {
       setLightStatusBar?: (light: boolean) => void;
-      haptic?: (type: "tap" | "success" | "warn") => void;
+      haptic?: (type: HapticType) => void;
+      dynamicColors?: () => string;
       downloadAndInstall?: (url: string) => void;
       canInstallPackages?: () => boolean;
       openInstallPermissionSettings?: () => void;

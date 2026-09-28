@@ -251,15 +251,28 @@ export async function setItemStatus(itemId: string, status: ItemStatus): Promise
 }
 
 // ---------- coach ----------
-export async function fetchCoach(ctx: { previousPickId?: string | null; todayMinutes?: number; streak?: number } = {}): Promise<CoachResult> {
+export async function fetchCoach(ctx: { previousPickId?: string | null; todayMinutes?: number; streak?: number; event?: string; recentLines?: string[] } = {}): Promise<CoachResult> {
+  const now = new Date();
   const res = await supabase.functions.invoke("coach", {
     body: {
-      local_hour: new Date().getHours(), weekday: new Date().toLocaleDateString("en", { weekday: "long" }),
+      local_hour: now.getHours(), weekday: now.toLocaleDateString("en", { weekday: "long" }),
       previous_pick_id: ctx.previousPickId ?? null, today_minutes: ctx.todayMinutes ?? null, streak: ctx.streak ?? null,
+      event: ctx.event ?? null, recent_lines: ctx.recentLines ?? [],
     },
   });
   if (res.error) throw res.error;
   return { ...(res.data as CoachResult), fetched_at: Date.now() };
+}
+
+export interface CheerEvent { kind: "done" | "goal" | "streak" | "cleared"; title?: string; minutes?: number; streak?: number; finished_today?: number }
+
+/** One fresh celebration line — only if it arrives while the celebration is still on screen. */
+export async function fetchCheer(event: CheerEvent, recentLines: string[], timeoutMs = 1800): Promise<string | null> {
+  const now = new Date();
+  const call = supabase.functions.invoke("coach", {
+    body: { mode: "cheer", event, recent_lines: recentLines, local_hour: now.getHours(), weekday: now.toLocaleDateString("en", { weekday: "long" }) },
+  }).then((r) => (r.error ? null : ((r.data as { line?: string })?.line || null))).catch(() => null);
+  return Promise.race([call, new Promise<null>((r) => setTimeout(() => r(null), timeoutMs))]);
 }
 
 // ---------- notifications log (analytics only — never worth surfacing a failure) ----------

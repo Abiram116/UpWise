@@ -14,6 +14,10 @@ export interface LinkMeta {
   content: string | null; // article body / any extra text for the model
   transcriptStatus?: string; // diagnostics: ok | no_tracks:<playability> | caption_fetch_failed:<err> | ...
   videoUrl?: string | null; // direct video file, when the page exposes one (Instagram reels)
+  // What kind of thing this is — drives whether it's worth an AI pass at all.
+  format?: "video" | "short" | "reel" | "post" | "article" | "link";
+  ogType?: string | null;
+  publishedTime?: string | null;
 }
 
 const YT_ID = /^[A-Za-z0-9_-]{11}$/;
@@ -286,14 +290,15 @@ export async function fetchArticle(canonicalUrl: string): Promise<LinkMeta> {
       const text = await r.text();
       const t = text.match(/^Title:\s*(.+)$/m);
       if (t) meta.title = t[1].trim();
+      meta.publishedTime = text.match(/^Published Time:\s*(.+)$/m)?.[1]?.trim() ?? null;
       const body = text.replace(/^(Title|URL Source|Published Time|Markdown Content):.*$/gm, "").trim();
       if (body.length > 100) { meta.content = body.slice(0, 40_000); meta.transcriptStatus = "jina_ok"; }
     }
   } catch { /* fall through */ }
 
-  // Still worth a direct fetch even when Jina fully succeeded — its markdown output has no
-  // structured place for og:image, so a thumbnail-only page fetch is the only way to get one.
-  if (!meta.title || !meta.content || !meta.thumbnailUrl) {
+  // Still worth a direct fetch even when Jina fully succeeded — its markdown has no place for
+  // og:image or og:type, and those decide the thumbnail and whether this is an article at all.
+  {
     try {
       const r = await fetch(canonicalUrl, { headers: { "User-Agent": UA } });
       const contentType = r.headers.get("content-type") ?? "";
@@ -307,6 +312,8 @@ export async function fetchArticle(canonicalUrl: string): Promise<LinkMeta> {
         meta.description ??= metaTag(html, "og:description") ?? metaTag(html, "description");
         meta.thumbnailUrl ??= metaTag(html, "og:image");
         meta.channel ??= metaTag(html, "og:site_name");
+        meta.ogType = metaTag(html, "og:type");
+        meta.publishedTime ??= metaTag(html, "article:published_time");
         if (!meta.content) {
           const readable = extractReadableText(html);
           if (readable) { meta.content = readable.slice(0, 40_000); meta.transcriptStatus = "readability_fallback"; }
@@ -318,4 +325,21 @@ export async function fetchArticle(canonicalUrl: string): Promise<LinkMeta> {
   if (!meta.content && !meta.transcriptStatus) meta.transcriptStatus = "unreadable";
   try { meta.channel ??= new URL(canonicalUrl).hostname.replace(/^www\./, ""); } catch { /* ignore */ }
   return meta;
+}
+
+// Sites whose pages are tools, repos, profiles or stores — worth keeping, not worth "learning".
+const LINK_HOSTS = /(^|\.)(github\.com|gitlab\.com|huggingface\.co|npmjs\.com|pypi\.org|play\.google\.com|apps\.apple\.com|chromewebstore\.google\.com|figma\.com|linkedin\.com|x\.com|twitter\.com|amazon\.[a-z.]+|vercel\.app|netlify\.app)$/i;
+
+/** Article (something to read and learn from) vs plain link (a site/tool to keep). Errs toward
+ * "link" — a bookmark costs nothing, a pointless AI summary of a homepage costs a call. */
+export function classifyPage(meta: LinkMeta): "article" | "link" {
+  let u: URL;
+  try { u = new URL(meta.canonicalUrl); } catch { return "link"; }
+  const path = u.pathname.replace(/\/+$/, "");
+  if (/\.pdf$/i.test(path) || /(^|\.)arxiv\.org$/i.test(u.hostname)) return "article";
+  if (!path || LINK_HOSTS.test(u.hostname)) return "link";
+  if (meta.ogType === "article" || meta.publishedTime) return "article";
+  const words = (meta.content ?? "").split(/\s+/).length;
+  if (/\/(blog|posts?|articles?|p|news|tutorials?|guides?|learn|course|lesson)\//i.test(`${path}/`) && words >= 250) return "article";
+  return words >= 600 ? "article" : "link";
 }

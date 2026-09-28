@@ -10,6 +10,10 @@ import android.os.Build
 import android.os.Bundle
 import android.os.Environment
 import android.os.Handler
+import android.os.VibrationAttributes
+import android.os.VibrationEffect
+import android.os.Vibrator
+import android.os.VibratorManager
 import android.os.Looper
 import android.provider.Settings
 import android.util.Log
@@ -17,6 +21,7 @@ import android.view.HapticFeedbackConstants
 import android.webkit.JavascriptInterface
 import android.webkit.WebView
 import androidx.activity.OnBackPressedCallback
+import androidx.core.app.NotificationManagerCompat
 import androidx.activity.enableEdgeToEdge
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
@@ -26,6 +31,7 @@ import org.json.JSONObject
 class MainActivity : TauriActivity() {
   private var webView: WebView? = null
   private var pendingShare: String? = null
+  private var pendingNotification: String? = null
   private var pendingDownloadId: Long = -1
   private val handler = Handler(Looper.getMainLooper())
 
@@ -50,6 +56,7 @@ class MainActivity : TauriActivity() {
     enableEdgeToEdge()
     super.onCreate(savedInstanceState)
     handleShare(intent)
+    handleNotificationTap(intent)
     val filter = IntentFilter(DownloadManager.ACTION_DOWNLOAD_COMPLETE)
     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
       registerReceiver(downloadReceiver, filter, Context.RECEIVER_NOT_EXPORTED)
@@ -100,6 +107,7 @@ class MainActivity : TauriActivity() {
     super.onNewIntent(intent)
     setIntent(intent)
     handleShare(intent)
+    handleNotificationTap(intent)
   }
 
   override fun onWebViewCreate(webView: WebView) {
@@ -110,6 +118,7 @@ class MainActivity : TauriActivity() {
     webView.isHorizontalScrollBarEnabled = false
     webView.addJavascriptInterface(NativeBridge(), "AndroidNative")
     pendingShare?.let { deliver(it) }
+    pendingNotification?.let { deliverNotification(it) }
   }
 
   private inner class NativeBridge {
@@ -142,18 +151,29 @@ class MainActivity : TauriActivity() {
       }
     }
 
-    // Subtle, OS-tuned taps instead of a blunt vibrate() buzz — same constants system UI uses.
+    // Pixel phones have a precise haptic motor that plays composed "primitives" (tick, click,
+    // rise, spin) — the same building blocks system UI uses. Each app moment gets its own
+    // texture; older/other devices fall back to the standard haptic constants.
     @JavascriptInterface
     fun haptic(type: String) {
-      handler.post {
-        val view = webView ?: return@post
-        val constant = when (type) {
-          "success" -> HapticFeedbackConstants.CONFIRM
-          "warn" -> HapticFeedbackConstants.REJECT
-          else -> HapticFeedbackConstants.VIRTUAL_KEY
-        }
-        view.performHapticFeedback(constant)
-      }
+      handler.post { playHaptic(type) }
+    }
+
+    // Material You: the wallpaper-derived tonal palette, so the app can match the phone's theme.
+    @JavascriptInterface
+    fun dynamicColors(): String {
+      if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) return "{}"
+      val ids = mapOf(
+        "a1-100" to android.R.color.system_accent1_100, "a1-200" to android.R.color.system_accent1_200,
+        "a1-600" to android.R.color.system_accent1_600, "a1-700" to android.R.color.system_accent1_700,
+        "a1-800" to android.R.color.system_accent1_800, "a1-900" to android.R.color.system_accent1_900,
+        "a3-100" to android.R.color.system_accent3_100, "a3-200" to android.R.color.system_accent3_200,
+        "a3-600" to android.R.color.system_accent3_600, "a3-700" to android.R.color.system_accent3_700,
+        "a3-900" to android.R.color.system_accent3_900,
+      )
+      val o = JSONObject()
+      for ((k, id) in ids) o.put(k, String.format("#%06X", 0xFFFFFF and getColor(id)))
+      return o.toString()
     }
 
     // Downloads the update APK via the system DownloadManager (survives backgrounding, shows
@@ -196,6 +216,74 @@ class MainActivity : TauriActivity() {
         }
       }
     }
+  }
+
+  private fun playHaptic(type: String) {
+    val vibrator: Vibrator? = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+      (getSystemService(Context.VIBRATOR_MANAGER_SERVICE) as? VibratorManager)?.defaultVibrator
+    } else @Suppress("DEPRECATION") (getSystemService(Context.VIBRATOR_SERVICE) as? Vibrator)
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && vibrator != null && vibrator.areAllPrimitivesSupported(
+        VibrationEffect.Composition.PRIMITIVE_TICK, VibrationEffect.Composition.PRIMITIVE_CLICK,
+        VibrationEffect.Composition.PRIMITIVE_SLOW_RISE, VibrationEffect.Composition.PRIMITIVE_QUICK_RISE,
+        VibrationEffect.Composition.PRIMITIVE_LOW_TICK, VibrationEffect.Composition.PRIMITIVE_SPIN)) {
+      val c = VibrationEffect.startComposition()
+      when (type) {
+        "select" -> c.addPrimitive(VibrationEffect.Composition.PRIMITIVE_LOW_TICK, 0.9f)
+        "success" -> c.addPrimitive(VibrationEffect.Composition.PRIMITIVE_QUICK_RISE, 0.45f)
+          .addPrimitive(VibrationEffect.Composition.PRIMITIVE_CLICK, 0.8f, 20)
+        "warn" -> c.addPrimitive(VibrationEffect.Composition.PRIMITIVE_CLICK, 0.7f)
+          .addPrimitive(VibrationEffect.Composition.PRIMITIVE_CLICK, 0.5f, 90)
+        // A small crescendo that lands: rise, hit, then a trail of fading ticks.
+        "celebrate" -> c.addPrimitive(VibrationEffect.Composition.PRIMITIVE_SLOW_RISE, 0.5f)
+          .addPrimitive(VibrationEffect.Composition.PRIMITIVE_CLICK, 1f, 30)
+          .addPrimitive(VibrationEffect.Composition.PRIMITIVE_TICK, 0.8f, 70)
+          .addPrimitive(VibrationEffect.Composition.PRIMITIVE_TICK, 0.55f, 60)
+          .addPrimitive(VibrationEffect.Composition.PRIMITIVE_TICK, 0.3f, 60)
+        "spin" -> c.addPrimitive(VibrationEffect.Composition.PRIMITIVE_SPIN, 0.7f)
+          .addPrimitive(VibrationEffect.Composition.PRIMITIVE_CLICK, 0.9f, 40)
+        else -> c.addPrimitive(VibrationEffect.Composition.PRIMITIVE_TICK, 0.7f)
+      }
+      val effect = c.compose()
+      // USAGE_TOUCH respects the phone's "touch feedback" setting, like system UI does.
+      if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+        vibrator.vibrate(effect, VibrationAttributes.createForUsage(VibrationAttributes.USAGE_TOUCH))
+      } else vibrator.vibrate(effect)
+      return
+    }
+    val view = webView ?: return
+    view.performHapticFeedback(when (type) {
+      "success", "celebrate", "spin" -> HapticFeedbackConstants.CONFIRM
+      "warn" -> HapticFeedbackConstants.REJECT
+      else -> HapticFeedbackConstants.VIRTUAL_KEY
+    })
+  }
+
+  // Notification body taps and action buttons (Start / Later / Tomorrow / Skip) arrive as an
+  // activity intent. The notification plugin's own JS event is easy to miss on a cold start,
+  // so deliver it to the page ourselves, the same retrying way shared links arrive.
+  private fun handleNotificationTap(intent: Intent?) {
+    if (intent == null || intent.getBooleanExtra("upwiseHandled", false)) return
+    val action = intent.getStringExtra("NotificationUserAction") ?: return
+    intent.putExtra("upwiseHandled", true)
+    val id = intent.getIntExtra("NotificationId", Int.MIN_VALUE)
+    if (id != Int.MIN_VALUE) NotificationManagerCompat.from(this).cancel(id)
+    val obj = try { JSONObject(intent.getStringExtra("LocalNotficationObject") ?: "{}") } catch (e: Exception) { JSONObject() }
+    val payload = JSONObject().put("action", action).put("notification", obj).toString()
+    pendingNotification = payload
+    if (webView != null) deliverNotification(payload)
+  }
+
+  private fun deliverNotification(payload: String) {
+    val token = System.nanoTime().toString()
+    val js = "(function(){try{" +
+      "var t='$token';window.__upwiseSeen=window.__upwiseSeen||{};if(window.__upwiseSeen[t])return;" +
+      "if(window.__upwiseNotif){window.__upwiseSeen[t]=1;window.__upwiseNotif($payload);}" +
+      "else{window.__upwisePendingNotif=$payload;}" +
+      "}catch(e){}})();"
+    for (delay in longArrayOf(0, 700, 1800, 3500, 6000)) {
+      handler.postDelayed({ webView?.evaluateJavascript(js, null) }, delay)
+    }
+    pendingNotification = null
   }
 
   private fun handleShare(intent: Intent?) {

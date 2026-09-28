@@ -1,167 +1,149 @@
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { useNavigate } from "react-router";
-import { motion } from "motion/react";
-import { useQuery } from "@tanstack/react-query";
-import { Flame, Play, RefreshCw } from "lucide-react";
-import { fetchCoach, useActivity, useItems, useProfile } from "../lib/api";
-import { heuristicPick, streak, todayMinutes, backlogHealth, weekly, isOnBreak, breakDaySet } from "../lib/stats";
-import { getPref, setPref } from "../lib/store";
-import { describeError } from "../lib/errors";
-import { COACH_TTL_MS } from "../lib/config";
-import { fmtMinutes, greeting, pluralize } from "../lib/utils";
-import type { CoachResult, Item } from "../lib/types";
-import { ItemRow } from "../components/ItemCard";
+import { AnimatePresence, motion } from "motion/react";
+import { Flame, Play } from "lucide-react";
+import { useActivity, useItems, useProfile } from "../lib/api";
+import { heuristicPick, streak, todayMinutes, isOnBreak, breakDaySet } from "../lib/stats";
+import { useCoach, useLocalLine, type CoachCtx } from "../lib/coach";
+import { haptic } from "../lib/haptics";
+import { FORMAT_LABEL, fmtMinutes, formatOf, isoDay } from "../lib/utils";
+import type { Item } from "../lib/types";
+import { ItemRow, FormatIcon } from "../components/ItemCard";
+import { Owl } from "../components/BrandMark";
 import { useSessionStore } from "../components/SessionBar";
-import { Dots, Empty, ErrorState, Page, Pill, Rise, Skeleton, easeOut, spring, stagger, useToast } from "../components/ui";
+import { ErrorState, Page, Pill, Rise, Skeleton, spring, stagger } from "../components/ui";
 
-export function useCoach(enabled: boolean, validIds?: Set<string>, today?: { minutes: number; streak: number }) {
-  const [cached, setCached] = useState<CoachResult | null | undefined>(undefined);
-  useEffect(() => { getPref<CoachResult | null>("coach", null).then(setCached); }, []);
-  // Cached purely by time otherwise — if the item the coach was talking about gets deleted,
-  // completed, or skipped, the cache never notices and just silently falls back to a generic
-  // "Up next" for however long is left on the TTL (caught live: up to 6 hours).
-  const pickGone = !!cached?.pick_item_id && !!validIds && !validIds.has(cached.pick_item_id);
-  // Results cached before the coach planned follow-ups have no next_item_ids — refresh those.
-  // Also stale on a new day: yesterday's "today" advice is wrong by definition.
-  const newDay = !!cached?.fetched_at && new Date(cached.fetched_at).toDateString() !== new Date().toDateString();
-  const stale = !cached || pickGone || newDay || !("next_item_ids" in cached) || Date.now() - (cached.fetched_at ?? 0) > COACH_TTL_MS;
-  const q = useQuery({
-    queryKey: ["coach"],
-    // Passing the last pick lets the coach rotate instead of repeating the same item for days.
-    queryFn: async () => { const c = await fetchCoach({ previousPickId: cached?.pick_item_id, todayMinutes: today?.minutes, streak: today?.streak }); await setPref("coach", c); return c; },
-    enabled: enabled && cached !== undefined && stale,
-    staleTime: COACH_TTL_MS,
-    retry: 1,
-  });
-  const refresh = async (): Promise<unknown> => {
-    const c = await q.refetch();
-    if (c.error) return c.error;
-    if (c.data) await setPref("coach", c.data);
-    return null;
-  };
-  return { coach: q.data ?? cached ?? null, refresh, loading: q.isFetching };
-}
+const TO_LEARN = new Set(["inbox", "queued", "in_progress"]);
+
+function daysSince(iso: string) { return Math.floor((Date.now() - new Date(iso).getTime()) / 86400e3); }
 
 export function HomeScreen() {
   const profile = useProfile();
   const items = useItems();
   const activity = useActivity(90);
   const nav = useNavigate();
-  const toast = useToast();
   const startSession = useSessionStore((s) => s.start);
+  const [passed, setPassed] = useState<string[]>([]); // "Not now" — shuffles locally, no AI call
 
-  const pending = useMemo(() => (items.data ?? []).filter((i) => i.status === "inbox" || i.status === "queued" || i.status === "in_progress"), [items.data]);
+  const pending = useMemo(() => (items.data ?? []).filter((i) => TO_LEARN.has(i.status)), [items.data]);
   const pendingIds = useMemo(() => new Set(pending.map((i) => i.id)), [pending]);
-  const { coach, refresh, loading: coachLoading } = useCoach(pending.length > 0, pendingIds,
-    activity.data ? { minutes: todayMinutes(activity.data), streak: streak(activity.data, breakDaySet(profile.data?.settings)).current } : undefined);
-  const pick: Item | null = useMemo(() => {
-    const fromCoach = coach?.pick_item_id ? pending.find((i) => i.id === coach.pick_item_id) : null;
-    return fromCoach ?? heuristicPick(items.data ?? []);
-  }, [coach, pending, items.data]);
-  const coached = !!(coach && pick && coach.pick_item_id === pick.id);
-  const nextUp = useMemo(
-    () => (coached ? (coach!.next_item_ids ?? []).map((id) => pending.find((i) => i.id === id)).filter((i): i is Item => !!i) : []),
-    [coached, coach, pending],
-  );
-
   const onBreak = isOnBreak(profile.data?.settings);
-  const st = activity.data ? streak(activity.data, breakDaySet(profile.data?.settings)) : null;
-  const today = activity.data ? todayMinutes(activity.data) : 0;
   const target = profile.data?.daily_target_minutes ?? 30;
-  const health = items.data && activity.data ? backlogHealth(items.data, weekly(activity.data, 4)) : null;
-  const inbox = (items.data ?? []).filter((i) => i.status === "inbox");
-  const inProgress = (items.data ?? []).filter((i) => i.status === "in_progress");
-  const name = profile.data?.display_name?.split(" ")[0];
+  const today = activity.data ? todayMinutes(activity.data) : 0;
+  const st = activity.data ? streak(activity.data, breakDaySet(profile.data?.settings)).current : 0;
+
+  const ctx: CoachCtx | undefined = useMemo(() => {
+    if (!items.data || !activity.data) return undefined;
+    const day = isoDay();
+    const finished = items.data.filter((i) => i.completed_at && isoDay(new Date(i.completed_at)) === day)
+      .sort((a, b) => (b.completed_at ?? "").localeCompare(a.completed_at ?? ""));
+    const lastActive = [...activity.data].reverse().find((d) => d.seconds > 0 || d.completed > 0)?.day;
+    return {
+      todayMinutes: today, target, streak: st, finishedToday: finished.length, lastFinishedTitle: finished[0]?.title ?? undefined,
+      pendingCount: pending.length, idleDays: lastActive ? daysSince(lastActive) : null,
+    };
+  }, [items.data, activity.data, today, target, st, pending.length]);
+
+  const { coach, refresh, loading } = useCoach(!onBreak, ctx, pendingIds);
+  const pick: Item | null = useMemo(() => {
+    const pool = pending.filter((i) => !passed.includes(i.id));
+    const fromCoach = !passed.length && coach?.pick_item_id ? pool.find((i) => i.id === coach.pick_item_id) : null;
+    return fromCoach ?? heuristicPick(pool.length ? pool : pending);
+  }, [coach, pending, passed]);
+  const nextUp = useMemo(() => {
+    const ids = coach?.pick_item_id === pick?.id ? coach?.next_item_ids ?? [] : [];
+    return ids.map((id) => pending.find((i) => i.id === id)).filter((i): i is Item => !!i);
+  }, [coach, pick, pending]);
+
+  const localLine = useLocalLine(ctx, pick);
+  const line = onBreak ? "On a break. Enjoy it — your streak's safe." : coach?.line || localLine;
+  const continuing = pending.filter((i) => i.status === "in_progress" && i.id !== pick?.id);
+  const recent = pending.filter((i) => i.status !== "in_progress" && i.id !== pick?.id).slice(0, 4);
 
   return (
     <Page>
-      <Rise>
-        <header>
-          <p className="meta row" style={{ gap: 10, fontSize: 15 }}>
-            <span>{greeting()}{name ? `, ${name}` : ""}</span>
-            {st && st.current > 0 && (
-              <span className="row" style={{ gap: 4, color: "var(--warm)" }}><Flame size={15} strokeWidth={2.4} /> <b className="num">{st.current}</b>-day streak</span>
-            )}
-          </p>
-          <h1 className="display">{coached ? coach!.headline : pick ? "Up next" : "All clear"}</h1>
-        </header>
-      </Rise>
+      <header className="col" style={{ gap: 18 }}>
+        <div className="row between">
+          <motion.button className="owl-btn" aria-label="Say something else" whileTap={{ scale: 0.9, rotate: -6 }} transition={spring}
+            onClick={() => { haptic.select(); void refresh(); }}>
+            <Owl size={46} blink={!loading} />
+          </motion.button>
+          <div className="row" style={{ gap: 8 }}>
+            {st > 0 && <span className="stat-pill" style={{ color: "var(--warm)" }}><Flame size={15} strokeWidth={2.4} /><b className="num">{st}</b></span>}
+            {!onBreak && <GoalRing minutes={today} target={target} onClick={() => nav("/stats")} />}
+          </div>
+        </div>
+        <AnimatePresence mode="wait" initial={false}>
+          <motion.h1 key={line} className="display friend-line" data-long={line.length > 60}
+            initial="hidden" animate="show" exit={{ opacity: 0, y: -6, transition: { duration: 0.15 } }}
+            variants={{ hidden: {}, show: { transition: { staggerChildren: 0.035 } } }}>
+            {line.split(" ").map((w, i) => (
+              <motion.span key={i} style={{ display: "inline-block", marginRight: "0.26em" }}
+                variants={{ hidden: { opacity: 0, y: 12, filter: "blur(5px)" }, show: { opacity: 1, y: 0, filter: "blur(0px)", transition: { duration: 0.42, ease: [0.05, 0.7, 0.1, 1] } } }}>{w}</motion.span>
+            ))}
+          </motion.h1>
+        </AnimatePresence>
+      </header>
 
-      {!items.data && items.isError ? <ErrorState error={items.error} onRetry={() => items.refetch()} /> : items.isPending ? <Skeleton h={220} r={28} /> : pick ? (
-        <Rise>
-          <motion.section className="slab" layout transition={spring}>
-            <button className="grow" style={{ textAlign: "left", width: "100%" }} onClick={() => nav(`/item/${pick.id}`)}>
-              <h2 className="headline focal">{pick.title}</h2>
-              <p className="meta row wrap" style={{ gap: 10, marginTop: 10 }}>
-                {pick.category?.name && <span>{pick.category.name}</span>}
-                {pick.estimated_minutes != null && <span>~{fmtMinutes(pick.estimated_minutes)}</span>}
-                <Dots n={pick.relevance_score} />
-              </p>
-              {(coached ? coach!.message : pick.ai?.why_it_matters) && (
-                <p className="body-lg" style={{ marginTop: 14 }}>{coached ? coach!.message : pick.ai?.why_it_matters}</p>
-              )}
-            </button>
-            {nextUp.length > 0 && (
-              <div className="col" style={{ gap: 2, marginTop: 14 }}>
-                <p className="section-title">Then</p>
-                {nextUp.map((i) => (
-                  <button key={i.id} className="row body" style={{ gap: 8, minHeight: 40, textAlign: "left" }} onClick={() => nav(`/item/${i.id}`)}>
-                    <span className="truncate grow">{i.title}</span>
-                    {i.estimated_minutes != null && <span className="meta num">~{fmtMinutes(i.estimated_minutes)}</span>}
-                  </button>
-                ))}
-              </div>
-            )}
-            <div className="row" style={{ gap: 8, marginTop: 22 }}>
-              <Pill variant="filled" size="lg" onClick={async () => { await startSession(pick); nav(`/item/${pick.id}`); }}>
-                <Play size={18} fill="currentColor" /> Start
-              </Pill>
-              <Pill variant="text" size="lg" onClick={() => nav(`/item/${pick.id}`)}>Details</Pill>
-              <span className="grow" />
-              <button aria-label="Ask the coach again" className="pill pill-text pill-icon" onClick={async () => { const err = await refresh(); toast(err ? `Coach unavailable — ${describeError(err).message}` : "Coach refreshed"); }}>
-                <RefreshCw size={17} style={{ animation: coachLoading ? "spin 0.8s linear infinite" : undefined }} />
+      {!items.data && items.isError ? <ErrorState error={items.error} onRetry={() => items.refetch()} />
+        : items.isPending ? <Skeleton h={260} r={28} />
+        : pick ? (
+          <Rise>
+            <motion.section className="slab pick" layout transition={spring}>
+              <button className="col" style={{ gap: 14, textAlign: "left", width: "100%" }} onClick={() => nav(`/item/${pick.id}`)}>
+                {pick.thumbnail_url && <div className="thumb thumb-lg"><img src={pick.thumbnail_url} alt="" /></div>}
+                <div className="col" style={{ gap: 8 }}>
+                  <h2 className="headline focal clamp-3">{pick.title}</h2>
+                  <p className="meta row wrap" style={{ gap: 10 }}>
+                    <span className="row" style={{ gap: 5 }}><FormatIcon item={pick} size={15} /> {FORMAT_LABEL[formatOf(pick)]}</span>
+                    {pick.estimated_minutes != null && <span>~{fmtMinutes(pick.estimated_minutes)}</span>}
+                    {pick.category?.name && <span>{pick.category.name}</span>}
+                  </p>
+                </div>
               </button>
-            </div>
-          </motion.section>
-        </Rise>
-      ) : (
-        <Rise><Empty title="Nothing waiting" body="Paste a link, or share one from YouTube or Instagram. UpWise reads it and tells you whether it's worth your time." /></Rise>
-      )}
-
-      <Rise>
-        {onBreak ? (
-          <div className="col" style={{ gap: 4 }}>
-            <span className="title-sm">On a break</span>
-            <p className="meta">
-              {profile.data?.settings.break_until === "indefinite" ? "Until you resume — no rush." : `Until ${new Date(profile.data!.settings.break_until as string).toLocaleDateString(undefined, { month: "short", day: "numeric" })}.`}
-              {profile.data?.settings.break_reason ? ` ${profile.data.settings.break_reason}` : ""} Your streak's safe.
-            </p>
-          </div>
+              {nextUp.length > 0 && (
+                <div className="col" style={{ gap: 2, marginTop: 14 }}>
+                  <p className="section-title">Then</p>
+                  {nextUp.map((i) => (
+                    <button key={i.id} className="row body" style={{ gap: 8, minHeight: 40, textAlign: "left" }} onClick={() => nav(`/item/${i.id}`)}>
+                      <FormatIcon item={i} size={15} />
+                      <span className="truncate grow">{i.title}</span>
+                      {i.estimated_minutes != null && <span className="meta num">~{fmtMinutes(i.estimated_minutes)}</span>}
+                    </button>
+                  ))}
+                </div>
+              )}
+              <div className="row" style={{ gap: 8, marginTop: 20 }}>
+                <Pill variant="filled" size="lg" className="grow" onClick={async () => { await startSession(pick); nav(`/item/${pick.id}`); }}>
+                  <Play size={18} fill="currentColor" /> Start
+                </Pill>
+                {pending.length > 1 && <Pill variant="text" size="lg" onClick={() => setPassed((p) => [...p, pick.id])}>Not now</Pill>}
+              </div>
+            </motion.section>
+          </Rise>
         ) : (
-          <div className="col" style={{ gap: 10 }}>
-            <div className="row between">
-              <span className="title-sm">Today</span>
-              <span className="meta num"><b style={{ color: "var(--on-surface)", fontWeight: 500 }}>{today}</b> / {target} min</span>
-            </div>
-            <div className="bar">
-              <motion.i initial={{ width: 0 }} animate={{ width: `${Math.min(100, (today / target) * 100)}%` }} transition={{ ...easeOut, duration: 0.7 }}
-                style={{ background: today >= target ? "var(--primary)" : undefined }} />
-            </div>
-            {health && health.pending > 0 && (
-              <p className="meta">
-                {pluralize(health.pending, "item")} left to learn, about {fmtMinutes(health.pendingMinutes)} in total.{" "}
-                {health.growing
-                  ? <span style={{ color: "var(--warm)" }}>Lately you save {health.savedPerWeek} a week and finish {health.donePerWeek}, so the list keeps growing.</span>
-                  : health.weeksToClear ? `At your current pace you'll clear it in about ${pluralize(health.weeksToClear, "week")}.` : ""}
-              </p>
-            )}
-          </div>
+          <Rise><p className="body-lg" style={{ color: "var(--on-surface-2)" }}>Share a video, reel or article to UpWise from any app — or tap + to paste a link.</p></Rise>
         )}
-      </Rise>
 
-      {inProgress.length > 0 && <Section title="In progress" items={inProgress} />}
-      {inbox.length > 0 && <Section title="New" items={inbox.slice(0, 6)} more={inbox.length > 6 ? () => nav("/library") : undefined} />}
+      {continuing.length > 0 && <Section title="Continue" items={continuing} />}
+      {recent.length > 0 && <Section title="Recently saved" items={recent} more={pending.length > 5 ? () => nav("/library") : undefined} />}
     </Page>
+  );
+}
+
+/** Today's minutes against the goal, as a small ring — the whole "Today" panel in 36px. */
+function GoalRing({ minutes, target, onClick }: { minutes: number; target: number; onClick: () => void }) {
+  const pct = Math.min(1, minutes / Math.max(1, target));
+  const C = 2 * Math.PI * 15;
+  return (
+    <button className="stat-pill" onClick={onClick} aria-label={`${minutes} of ${target} minutes today`}>
+      <svg width="22" height="22" viewBox="0 0 36 36" style={{ transform: "rotate(-90deg)" }}>
+        <circle cx="18" cy="18" r="15" fill="none" stroke="var(--surface-high)" strokeWidth="5" />
+        <motion.circle cx="18" cy="18" r="15" fill="none" stroke="var(--primary)" strokeWidth="5" strokeLinecap="round"
+          strokeDasharray={C} initial={{ strokeDashoffset: C }} animate={{ strokeDashoffset: C * (1 - pct) }} transition={{ duration: 0.8, ease: [0.05, 0.7, 0.1, 1] }} />
+      </svg>
+      <span className="num"><b>{minutes}</b>/{target}m</span>
+    </button>
   );
 }
 

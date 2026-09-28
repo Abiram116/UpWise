@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useState } from "react";
-import { Bell, ChevronRight, Coffee, Copy, CopyCheck, Download, FileText, Moon, RefreshCw, Target, User } from "lucide-react";
+import { useEffect, useState } from "react";
+import { Bell, ChevronRight, Coffee, Download, Moon, Palette, RefreshCw, Target, User } from "lucide-react";
 import { useActivity, useProfile, useUpdateProfile, useItems, useSessions } from "../lib/api";
 import { ensurePermission, replanNotifications, settingsOf } from "../lib/notifications";
 import { describeError, isNetworkError } from "../lib/errors";
@@ -7,12 +7,12 @@ import "../lib/android-bridge";
 import { checkForUpdate, currentVersion, type UpdateInfo } from "../lib/updater";
 import { isTauri, platform } from "../lib/platform";
 import { RELEASE_REPO } from "../lib/config";
-import { applyTheme, type Theme } from "../theme";
-import { formatSkillsExport, skillsSummary, isOnBreak } from "../lib/stats";
+import { applyPalette, applyTheme, currentPalette, wallpaperAvailable, type Palette as PaletteName, type Theme } from "../theme";
+import { isOnBreak } from "../lib/stats";
 import { isoDay, pluralize } from "../lib/utils";
 import { extractNotes } from "../lib/changelog";
 import type { Profile } from "../lib/types";
-import { useCoach } from "./Home";
+import { useCoach } from "../lib/coach";
 import { Chip, ErrorState, Page, Pill, Rise, Segmented, Sheet, Skeleton, Switch, useToast } from "../components/ui";
 
 const TARGETS = [15, 30, 45, 60, 90];
@@ -30,17 +30,12 @@ export function SettingsScreen() {
   const [checking, setChecking] = useState(false);
   const [progress, setProgress] = useState<number | null>(null);
   const [goalOpen, setGoalOpen] = useState(false);
-  const [exportOpen, setExportOpen] = useState(false);
   const [breakOpen, setBreakOpen] = useState(false);
+  const [palette, setPaletteState] = useState<PaletteName>(currentPalette());
   const [theme, setTheme] = useState<Theme>((localStorage.getItem("upwise:theme") as Theme) || "system");
 
   useEffect(() => { currentVersion().then(setVersion); }, []);
 
-  const sessionsAll = useSessions(365); // export should cover everything completed, not just the last 30 days
-  const skillsText = useMemo(() => {
-    if (!items.data || !sessionsAll.data || !profile.data) return "";
-    return formatSkillsExport(skillsSummary(items.data, sessionsAll.data), profile.data.goal, profile.data.display_name);
-  }, [items.data, sessionsAll.data, profile.data]);
 
   const p = profile.data;
   const s = settingsOf(p);
@@ -101,6 +96,13 @@ export function SettingsScreen() {
           <div className="grow title-sm">Appearance</div>
           <Segmented value={theme} onChange={(t) => { setTheme(t); applyTheme(t); }} options={[{ value: "system", label: "Auto" }, { value: "light", label: "Light" }, { value: "dark", label: "Dark" }]} />
         </div>
+        {wallpaperAvailable() && (
+          <div className="setting" style={{ flexWrap: "wrap" }}>
+            <span className="setting-icon"><Palette size={18} /></span>
+            <div className="grow"><div className="title-sm">Colours</div><div className="meta">Match your phone's wallpaper, or UpWise green</div></div>
+            <Segmented value={palette} onChange={(p) => { setPaletteState(p); applyPalette(p); }} options={[{ value: "wallpaper", label: "Wallpaper" }, { value: "upwise", label: "UpWise" }]} />
+          </div>
+        )}
         <button className="setting" onClick={() => setBreakOpen(true)}>
           <span className="setting-icon"><Coffee size={18} /></span>
           <div className="grow">
@@ -123,21 +125,7 @@ export function SettingsScreen() {
         </div>
       </Group>
 
-      <Group title="Export" hint="A summary of what you've learned, by area — for a resume or LinkedIn.">
-        <button className="setting" onClick={() => setExportOpen(true)}>
-          <span className="setting-icon"><FileText size={18} /></span>
-          <div className="grow"><div className="title-sm">Skills summary</div><div className="meta">Grouped by area, ready to copy</div></div>
-          <ChevronRight size={18} className="meta" />
-        </button>
-      </Group>
 
-      <Group title="Library">
-        <div className="setting">
-          <span className="setting-icon"><CopyCheck size={18} /></span>
-          <div className="grow"><div className="title-sm">Warn about similar saves</div><div className="meta">Flag likely duplicates when you save something new</div></div>
-          <Switch on={p.settings.warn_duplicates !== false} onChange={(v) => update.mutate({ settings: { ...p.settings, warn_duplicates: v } }, { onError: fail("Couldn't save that") })} label="Warn about similar saves" />
-        </div>
-      </Group>
 
       <Group title="App">
         <button className="setting" onClick={doCheck} disabled={checking || !isTauri}>
@@ -170,19 +158,6 @@ export function SettingsScreen() {
         }} />
       </Sheet>
 
-      <Sheet open={exportOpen} onClose={() => setExportOpen(false)} title="Skills summary">
-        <div className="col" style={{ gap: 14 }}>
-          <pre className="body selectable" style={{ whiteSpace: "pre-wrap", fontFamily: "inherit", maxHeight: 360, overflow: "auto", margin: 0, background: "var(--surface-mid)", borderRadius: 16, padding: 16 }}>
-            {skillsText || "Nothing completed yet — finish a few items and come back."}
-          </pre>
-          <Pill variant="filled" size="lg" disabled={!skillsText} onClick={async () => {
-            try { await navigator.clipboard.writeText(skillsText); toast("Copied"); }
-            catch { toast("Couldn't copy automatically — select the text above manually"); }
-          }}>
-            <Copy size={16} /> Copy to clipboard
-          </Pill>
-        </div>
-      </Sheet>
 
       <Sheet open={!!upd && upd !== "none"} onClose={() => setUpd(null)} title={`Update to v${upd !== "none" && upd ? upd.version : ""}`}>
         {upd && upd !== "none" && (

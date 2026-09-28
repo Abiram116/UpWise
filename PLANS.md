@@ -107,6 +107,18 @@ Living backlog of things to build next. Nothing here is built yet — this is th
 - [x] **Windows:** window starts hidden and appears after first paint (no white flash), with a Rust fallback so it can never stay invisible.
 - Relock when offline is deferred to the next online launch — the PIN can only be verified by the server, and locking you out of your own cached library with no signal is worse.
 
+### Companion pass (v0.10.0)
+
+- [x] **Cut what isn't used.** Item page is title + one-line gist + concept chips + actions (why-it-matters, prerequisites, overlap, resources, builds-on, "analyzed by" all gone). Queue and Log-time buttons, Library review sheet, skills export and the duplicate toggle removed.
+- [x] **Content types.** YouTube videos vs Shorts, Instagram reels vs posts, articles, and plain links. Links (sites, tools, repos) are kept as bookmarks with status `saved` — no AI call — with one-tap "Learn it instead" / "Just keep the link". Articles no longer show a "transcript".
+- [x] **Friend on Today.** Coach rewritten as a friend's voice: usually one short sentence, two only when something real happened. Regenerates only when the situation changes (part of day, finished something, goal met, new save, comeback), remembers its last 10 lines so it never repeats, falls back to local lines offline. Tap the owl for another.
+- [x] **Celebrations.** Finishing, goal, streak milestones, emptied list: five animation variants (never the same twice), line pool that avoids recent ones, swapped for an AI line if it lands in 1.8s, Pixel haptic crescendo.
+- [x] **Notification buttons actually work.** Root cause: the handler read `extra`/`title` from the top level of `{ actionId, notification }`, so every button fell through to "open the app". Now MainActivity delivers taps natively (survives cold start); Later/Tomorrow/Skip act and send the app back.
+- [x] **AI routing.** Per-job primary + lighter fallback (gpt-oss-20b ↔ llama-3.1-8b-instant) on 429/5xx/timeout/bad JSON, per-job timeouts, lean prompt (~2.5k tokens of source, 9 fields out).
+- [x] **Pixel 11.** Composed haptic primitives, Material You wallpaper colours (Settings → Colours), themed-icon monochrome layer, predictive back, 16 KB page-aligned native lib.
+- [x] **New icon.** Minimal owl — two eyes glancing up-right, apricot beak, on sage.
+- Next: Gemini Nano (ML Kit GenAI Prompt API) for instant offline cheer/Today lines once it can be tested on the device.
+
 ## 9. Docs
 
 - [x] **README rewrite.** Done: leads with the actual Telegram link-hoarding story instead of a feature dump, two custom SVG illustrations (`readme-assets/hero.svg`, `readme-assets/flow.svg`) hand-drawn in the app's exact tonal palette (sage `#2f6a52`/`#cfe7da`, apricot `#9a5b2a`/`#f5dcc4`) and squircle/pill shape language, no stock icons. Setup/dev/release commands kept but pushed to the bottom; `VITE_APP_PASSWORD` reference removed from the secrets table (obsolete since the PIN gate change).

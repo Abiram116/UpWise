@@ -2,13 +2,21 @@ import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { useNavigate } from "react-router";
 import { AnimatePresence, motion } from "motion/react";
 import { AlertCircle, ArrowRight, CloudOff, Play } from "lucide-react";
-import { useAnalyze, useCategories, useProfile, useSetStatus, useUpdateItem, type AnalyzeStage } from "../lib/api";
-import { extractUrl, fmtMinutes, detectSource, SOURCE_LABEL } from "../lib/utils";
+import { useAnalyze, useCategories, useSetStatus, useUpdateItem, type AnalyzeStage } from "../lib/api";
+import { extractUrl, fmtMinutes, detectSource, FORMAT_LABEL, formatOf } from "../lib/utils";
+import { FormatIcon } from "./ItemCard";
+
+/** What UpWise thinks it's about to save, before it's saved. */
+function previewLabel(url: string, source: ReturnType<typeof detectSource>): string {
+  if (source === "youtube") return /\/shorts\//.test(url) ? "YouTube Short" : "YouTube video";
+  if (source === "instagram") return /\/p\//.test(url) ? "Instagram post — a note helps the AI" : "Instagram reel — a note helps the AI";
+  return "Article or link — articles get a quick read, plain sites are just kept";
+}
 import { enqueue } from "../lib/outbox";
 import { connection } from "../lib/connection";
 import { describeError, isNetworkError } from "../lib/errors";
 import type { Item } from "../lib/types";
-import { Chip, CheckIcon, Dots, Pill, Sheet, easeOut, spring, useToast } from "./ui";
+import { Chip, CheckIcon, Pill, Sheet, easeOut, spring, useToast } from "./ui";
 import { useSessionStore } from "./SessionBar";
 
 // ---- tiny external store so share/paste can hand a URL to the sheet from anywhere ----
@@ -129,7 +137,7 @@ export function AddSheet({ open, onClose }: { open: boolean; onClose: () => void
             onSubmit={(e) => { e.preventDefault(); const u = extractUrl(url); if (u) void run(u); }}>
             <input ref={inputRef} className="input input-lg" placeholder="YouTube, Instagram or article link" value={url}
               onChange={(e) => setUrl(e.target.value)} inputMode="url" autoCapitalize="off" autoCorrect="off" spellCheck={false} enterKeyHint="go" />
-            {source && url && <p className="meta" style={{ paddingLeft: 20 }}>{SOURCE_LABEL[source]}{source === "instagram" ? " — add a note so the AI knows what it's about" : ""}</p>}
+            {source && url && <p className="meta" style={{ paddingLeft: 20 }}>{previewLabel(url, source)}</p>}
             <input className="input" placeholder="Note (optional)" value={note} onChange={(e) => setNote(e.target.value)} />
             {error && <p className="meta row" style={{ color: "var(--error)", gap: 6, paddingLeft: 20 }}><AlertCircle size={14} /> {error}</p>}
             <Pill variant="filled" size="lg" type="submit" disabled={!extractUrl(url)} style={{ marginTop: 8 }}>Analyze and save</Pill>
@@ -147,7 +155,7 @@ export function AddSheet({ open, onClose }: { open: boolean; onClose: () => void
                 </motion.div>
               );
             })}
-            <p className="meta" style={{ marginTop: 6 }}>Usually 3–8 seconds.</p>
+            <p className="meta" style={{ marginTop: 6 }}>Usually a few seconds.</p>
           </motion.div>
         )}
 
@@ -164,11 +172,39 @@ function ResultCard({ result, onDone }: { result: { item: Item; duplicate: boole
   const update = useUpdateItem();
   const setStatus = useSetStatus();
   const cats = useCategories();
-  const profile = useProfile();
   const start = useSessionStore((s) => s.start);
   const [cat, setCat] = useState(item.category?.id ?? null);
   const [dupSkipped, setDupSkipped] = useState(false);
-  const possibleDup = profile.data?.settings.warn_duplicates !== false ? item.ai?.possible_duplicate : null;
+  const possibleDup = item.ai?.possible_duplicate ?? null;
+  const format = formatOf(item);
+  const analyze = useAnalyze();
+  const [switching, setSwitching] = useState(false);
+  const learnInstead = async () => {
+    setSwitching(true);
+    try { await analyze.mutateAsync([item.url, { reanalyzeId: item.id, mode: "learn" }]); toast("Added to To learn"); onDone(); nav(`/item/${item.id}`); }
+    catch { toast("Couldn't switch it — try from the item page"); }
+    finally { setSwitching(false); }
+  };
+
+  if (format === "link" && !duplicate) {
+    return (
+      <motion.div className="col" style={{ gap: 16 }} initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={spring}>
+        <div className="row" style={{ gap: 8 }}><Chip tone="primary">Saved to your links</Chip></div>
+        <div className="row" style={{ gap: 14 }}>
+          <div className="thumb" data-tone="warm">{item.thumbnail_url ? <img src={item.thumbnail_url} alt="" /> : <FormatIcon item={item} size={22} />}</div>
+          <div className="grow col" style={{ gap: 2 }}>
+            <h3 className="title clamp-2">{item.title}</h3>
+            <p className="meta truncate">{item.channel}</p>
+          </div>
+        </div>
+        <p className="meta">Looks like a site to keep, not something to study — so no AI summary. Wrong call?</p>
+        <div className="row" style={{ gap: 8 }}>
+          <Pill variant="filled" size="lg" className="grow" onClick={onDone}>Done</Pill>
+          <Pill variant="tonal" size="lg" loading={switching} onClick={learnInstead}>Learn it instead</Pill>
+        </div>
+      </motion.div>
+    );
+  }
 
   const changeCat = async (id: string) => {
     setCat(id);
@@ -179,7 +215,7 @@ function ResultCard({ result, onDone }: { result: { item: Item; duplicate: boole
     <motion.div className="col" style={{ gap: 16 }} initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={spring}>
       <div className="row" style={{ gap: 8 }}>
         <Chip tone={duplicate ? "warm" : "primary"}>{duplicate ? "Already saved" : "Saved"}</Chip>
-        {item.has_transcript && <Chip>Transcript read</Chip>}
+        <Chip><span className="row" style={{ gap: 5 }}><FormatIcon item={item} size={14} />{FORMAT_LABEL[format]}</span></Chip>
         {ai_error && <Chip tone="error">AI unavailable</Chip>}
       </div>
 
@@ -200,13 +236,11 @@ function ResultCard({ result, onDone }: { result: { item: Item; duplicate: boole
         <p className="meta row wrap" style={{ gap: 10, marginTop: 8 }}>
           {item.channel && <span>{item.channel}</span>}
           {item.estimated_minutes != null && <span>~{fmtMinutes(item.estimated_minutes)} to learn</span>}
-          <Dots n={item.relevance_score} />
           {item.ai?.difficulty && <span style={{ textTransform: "capitalize" }}>{item.ai.difficulty}</span>}
         </p>
       </div>
 
-      {item.ai?.summary && <p className="body selectable">{item.ai.summary}</p>}
-      {item.ai?.why_it_matters && <p className="body" style={{ color: "var(--on-surface)" }}>{item.ai.why_it_matters}</p>}
+      {item.ai?.summary && <p className="body-lg selectable" style={{ color: "var(--on-surface-2)" }}>{item.ai.summary}</p>}
 
       {!!cats.data?.length && (
         <div className="chips-scroll">
