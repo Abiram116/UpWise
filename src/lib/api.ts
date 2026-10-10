@@ -264,10 +264,10 @@ export async function fetchCoach(ctx: { previousPickId?: string | null; todayMin
   return { ...(res.data as CoachResult), fetched_at: Date.now() };
 }
 
-export interface CheerEvent { kind: "done" | "goal" | "streak" | "cleared"; title?: string; minutes?: number; streak?: number; finished_today?: number }
+export interface CheerEvent { kind: "done" | "goal" | "streak" | "cleared"; title?: string; minutes?: number; streak?: number; finished_today?: number; /** A light pop (confetti + haptic) with no card — for rapid learning in the feed. */ quiet?: boolean }
 
 /** One fresh celebration line — only if it arrives while the celebration is still on screen. */
-export async function fetchCheer(event: CheerEvent, recentLines: string[], timeoutMs = 1800): Promise<string | null> {
+export async function fetchCheer(event: CheerEvent, recentLines: string[], timeoutMs = 2700): Promise<string | null> {
   const now = new Date();
   const call = supabase.functions.invoke("coach", {
     body: { mode: "cheer", event, recent_lines: recentLines, local_hour: now.getHours(), weekday: now.toLocaleDateString("en", { weekday: "long" }) },

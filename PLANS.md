@@ -119,6 +119,18 @@ Living backlog of things to build next. Nothing here is built yet — this is th
 - [x] **New icon.** Minimal owl — two eyes glancing up-right, apricot beak, on sage.
 - Next: Gemini Nano (ML Kit GenAI Prompt API) for instant offline cheer/Today lines once it can be tested on the device.
 
+### v1.0.0 — first release
+
+Everything below shipped together as 1.0.0. Found and fixed by testing the live functions end to end before release: the fast "cheer" model doesn't exist on this Groq account (the router now falls through to the next candidate on any 404/403/429/5xx/timeout/bad JSON and remembers dead models); reasoning models returned nothing from a tiny token budget; the Scroll feed's top bar collided with the Windows title-bar buttons; a first-ever launch announced a stale streak milestone; the coach didn't retry when the connection came back.
+
+### Scroll + presence pass (v0.12.0)
+
+- [x] **Scroll feed.** New tab: your saves as a reels-style vertical feed — one per screen, snap scrolling, ambient colour from each thumbnail, the one-line gist, Start / Learned / Skip under the thumb. Quick things (shorts, reels, posts, ≤6 min) first; a Quick/All toggle remembers its state. Short items are logged automatically on "Learned" (their estimate); longer ones ask for honest minutes. Learned fires a quiet confetti pop instead of the full card so rapid learning isn't interrupted.
+- [x] **Study slot, learned, never set.** The hour you're usually here and learning, from app-open votes (once per hour) plus real sessions, smoothed and kept out of quiet hours. Notifications fire at it (skipped when it lands within 90 min of the morning plan or the goal's already met) and Today says so: "I'll nudge you around 7 pm — that's when you usually learn".
+- [x] **Owl presence.** Moods from real state: waiting (past 5 pm, nothing learned, things saved — settles its gaze on you and tilts its head), sleepy with floating Zs (days away or on a break), happy (goal met), thinking (AI writing). Waking from sleepy startles it into a hop.
+- [x] **Today shows the gist** under the pick, so you remember why you saved it.
+- Idea backlog (not built): 5-minute doorway timer, save-time "do it now?" prompt, shrinking daily goal on low weeks, Instagram-time swap nudge (needs usage access), audio brief.
+
 ## 9. Docs
 
 - [x] **README rewrite.** Done: leads with the actual Telegram link-hoarding story instead of a feature dump, two custom SVG illustrations (`readme-assets/hero.svg`, `readme-assets/flow.svg`) hand-drawn in the app's exact tonal palette (sage `#2f6a52`/`#cfe7da`, apricot `#9a5b2a`/`#f5dcc4`) and squircle/pill shape language, no stock icons. Setup/dev/release commands kept but pushed to the bottom; `VITE_APP_PASSWORD` reference removed from the secrets table (obsolete since the PIN gate change).

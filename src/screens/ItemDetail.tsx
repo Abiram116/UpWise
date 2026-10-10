@@ -11,6 +11,7 @@ import { getPref, setPref } from "../lib/store";
 import { useActiveSession, useSessionStore } from "../components/SessionBar";
 import { FormatIcon } from "../components/ItemCard";
 import { celebrateDone } from "../components/Celebrate";
+import { FinishSheet } from "../components/FinishSheet";
 import { Chip, Empty, ErrorState, Page, Pill, Rise, Sheet, Skeleton, Spinner, spring, useToast } from "../components/ui";
 import { useQueryClient } from "@tanstack/react-query";
 
@@ -216,7 +217,7 @@ export function ItemDetailScreen() {
         </div>
       </Sheet>
 
-      <FinishPromptSheet open={finishPromptOpen} onClose={() => setFinishPromptOpen(false)} itemId={item.id} hasTakeaway={!!ai.summary}
+      <FinishSheet open={finishPromptOpen} onClose={() => setFinishPromptOpen(false)}
         onDone={async (minutes) => {
           try {
             if (minutes > 0) await logManualMinutes(item.id, minutes);
@@ -238,24 +239,6 @@ function toSeconds(mmss: string): number {
 
 function Block({ title, children }: { title: string; children: React.ReactNode }) {
   return <Rise><section className="col" style={{ gap: 10 }}><p className="title-sm">{title}</p>{children}</section></Rise>;
-}
-
-// A "Mark done" with no session behind it is exactly how stats end up claiming "2 things
-// learned, 1 min invested" — so completing always asks for an honest minute estimate first.
-// No 0-min option on purpose: if truly no time was spent, "Skip" is the honest status, not "done".
-function FinishPromptSheet({ open, onClose, hasTakeaway, onDone }: {
-  open: boolean; onClose: () => void; itemId: string; hasTakeaway: boolean; onDone: (minutes: number) => Promise<void>;
-}) {
-  const [busy, setBusy] = useState<number | null>(null);
-  const pick = async (m: number) => { setBusy(m); try { await onDone(m); } finally { setBusy(null); } };
-  return (
-    <Sheet open={open} onClose={onClose} title="How long did that take?">
-      <p className="body" style={{ marginBottom: 16 }}>
-        {hasTakeaway ? "Even just reading the takeaway counts — pick roughly how long." : "Pick roughly how long you actually spent, so your stats stay honest."}
-      </p>
-      <div className="chips">{[1, 3, 5, 10, 15, 20, 30, 45, 60].map((m) => <Chip key={m} onClick={() => busy === null && pick(m)}>{m} min</Chip>)}</div>
-    </Sheet>
-  );
 }
 
 /** Captions often arrive as one unpunctuated wall of text — break it into readable paragraphs:

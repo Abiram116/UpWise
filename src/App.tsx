@@ -7,6 +7,7 @@ import { installShareBridge } from "./lib/share";
 import { isTauri } from "./lib/platform";
 import { getPref, setPref } from "./lib/store";
 import { flushOutbox } from "./lib/outbox";
+import { loadOpens, recordOpen } from "./lib/slot";
 import { connection } from "./lib/connection";
 import { isNetworkError } from "./lib/errors";
 import { pluralize } from "./lib/utils";
@@ -29,6 +30,7 @@ import "./lib/android-bridge";
 // lazy so the initial bundle the WebView has to parse before first paint stays small.
 const Onboarding = lazy(() => import("./screens/Onboarding").then((m) => ({ default: m.Onboarding })));
 const PinGate = lazy(() => import("./screens/PinGate").then((m) => ({ default: m.PinGate })));
+const FeedScreen = lazy(() => import("./screens/Feed").then((m) => ({ default: m.FeedScreen })));
 const LibraryScreen = lazy(() => import("./screens/Library").then((m) => ({ default: m.LibraryScreen })));
 const ItemDetailScreen = lazy(() => import("./screens/ItemDetail").then((m) => ({ default: m.ItemDetailScreen })));
 const StatsScreen = lazy(() => import("./screens/Stats").then((m) => ({ default: m.StatsScreen })));
@@ -88,6 +90,7 @@ function Gate() {
       <Routes>
         <Route element={<AppShell />}>
           <Route path="/" element={<HomeScreen />} />
+          <Route path="/feed" element={<FeedScreen />} />
           <Route path="/library" element={<LibraryScreen />} />
           <Route path="/item/:id" element={<ItemDetailScreen />} />
           <Route path="/stats" element={<StatsScreen />} />
@@ -126,6 +129,14 @@ function Background() {
     // On reconnect, pull fresh data as well — anything on screen may be days old.
     return connection.onReconnect(() => { void flush(); void qc.invalidateQueries(); });
   }, [qc, toast]);
+  // Every time the app comes to the foreground, that hour votes for being "a free moment" —
+  // the study slot is learned from these plus real sessions.
+  useEffect(() => {
+    void recordOpen();
+    const onShow = () => { if (document.visibilityState === "visible") void recordOpen(); };
+    document.addEventListener("visibilitychange", onShow);
+    return () => document.removeEventListener("visibilitychange", onShow);
+  }, []);
   // Persisted (survives cold starts, unlike a ref) so reopening the app the same day never
   // re-plans. Settings changes replan directly via their own save handler, independent of this.
   const plannedRef = useRef<string>("");
@@ -148,7 +159,7 @@ function Background() {
       if (cancelled || lastPlanned === key || plannedRef.current === key) return;
       plannedRef.current = key;
       await setPref("notifPlannedDate", key);
-      void replanNotifications({ profile: profile.data!, items: items.data!, sessions: sessions.data!, coach, activity: activity.data });
+      void replanNotifications({ profile: profile.data!, items: items.data!, sessions: sessions.data!, coach, activity: activity.data, opens: await loadOpens() });
     })();
     return () => { cancelled = true; };
     // Deliberately excludes `coach` — a coach refresh should not re-trigger a full OS reschedule;
@@ -227,9 +238,10 @@ function Celebrations() {
         return;
       }
       const milestone = [...STREAK_MILESTONES].reverse().find((m) => st >= m) ?? 0;
-      const celebrated = await getPref("celebratedStreak", 0);
-      // A broken streak resets the ladder, so a new run gets its milestones again.
-      if (milestone < celebrated) { await setPref("celebratedStreak", milestone); return; }
+      const celebrated = await getPref("celebratedStreak", -1);
+      // First time seeing this device: a streak you already had isn't news — start from it
+      // silently. And a broken streak resets the ladder, so a new run gets its milestones again.
+      if (celebrated < 0 || milestone < celebrated) { await setPref("celebratedStreak", milestone); return; }
       if (milestone && celebrated < milestone) {
         await setPref("celebratedStreak", milestone);
         void celebrate({ kind: "streak", streak: milestone });

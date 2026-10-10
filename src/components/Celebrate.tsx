@@ -63,6 +63,7 @@ function dismissIn(ms: number) {
 }
 
 export async function celebrate(e: CheerEvent) {
+  if (e.quiet) { if (!current) { haptic.celebrate(); confetti("pop", 0.7); } return; }
   if (current && PRIORITY[e.kind] < PRIORITY[current.kind]) return; // never downgrade a bigger win on screen
   const recent = await recentLines();
   const hour = new Date().getHours();
@@ -94,10 +95,10 @@ export async function celebrate(e: CheerEvent) {
 if (import.meta.env.DEV) (window as unknown as { __celebrate?: typeof celebrate }).__celebrate = celebrate;
 
 /** Finishing an item — counts what else got finished today for a more specific line. */
-export function celebrateDone(title: string | null | undefined) {
+export function celebrateDone(title: string | null | undefined, opts: { quiet?: boolean } = {}) {
   const today = new Date().toDateString();
   const n = queryClient.getQueryData<Item[]>(["items"])?.filter((i) => i.completed_at && new Date(i.completed_at).toDateString() === today).length ?? 1;
-  void celebrate({ kind: "done", title: title ?? undefined, finished_today: Math.max(1, n) });
+  void celebrate({ kind: "done", title: title ?? undefined, finished_today: Math.max(1, n), quiet: opts.quiet });
 }
 
 // ---------- hero visuals ----------

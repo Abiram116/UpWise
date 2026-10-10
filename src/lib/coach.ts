@@ -2,8 +2,9 @@ import { useEffect, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { fetchCoach } from "./api";
 import { getPref, setPref } from "./store";
-import { connection } from "./connection";
+import { useConnection } from "./connection";
 import type { CoachResult, Item } from "./types";
+import type { OwlMood } from "../components/BrandMark";
 
 // The Today line reacts to your situation instead of a timer: it's regenerated only when
 // something meaningful changed (new part of the day, finished something, hit the goal, saved
@@ -51,6 +52,7 @@ export const recentLines = () => getPref<string[]>(MEMORY_KEY, []);
 export function useCoach(enabled: boolean, ctx?: CoachCtx, pendingIds?: Set<string>) {
   const [cached, setCached] = useState<CoachResult | null | undefined>(undefined);
   useEffect(() => { getPref<CoachResult | null>("coach", null).then(setCached); }, []);
+  const conn = useConnection(); // re-evaluate "enabled" when the connection comes back, not just on data changes
   const sig = ctx ? situationSig(ctx) : "";
   const pickGone = !!cached?.pick_item_id && !!pendingIds && !pendingIds.has(cached.pick_item_id);
   const due = !!ctx && (cached?.sig !== sig || pickGone || !cached?.line);
@@ -71,7 +73,7 @@ export function useCoach(enabled: boolean, ctx?: CoachCtx, pendingIds?: Set<stri
       setCached(withSig);
       return withSig;
     },
-    enabled: enabled && cached !== undefined && due && connection.get() === "ok",
+    enabled: enabled && cached !== undefined && due && conn === "ok",
     staleTime: Infinity,
     retry: 0,
     meta: { persist: false },
@@ -98,4 +100,16 @@ export function useLocalLine(ctx: CoachCtx | undefined, pick: Item | null): stri
     const seed = [...`${new Date().toDateString()}${part}`].reduce((a, ch) => a + ch.charCodeAt(0), 0);
     return pools[seed % pools.length];
   }, [ctx, pick]);
+}
+
+/** How the owl feels, from what's actually going on — shared by Today and the feed. */
+export function owlMoodFor(c: CoachCtx | undefined, o: { loading?: boolean; onBreak?: boolean } = {}): OwlMood {
+  if (o.loading) return "think";
+  if (o.onBreak) return "sleepy";
+  if (!c) return "idle";
+  if (c.todayMinutes >= c.target) return "happy";
+  if ((c.idleDays ?? 0) >= 4) return "sleepy";
+  // Past 5 pm with nothing learned yet and things waiting: it sits there, watching you.
+  if (c.todayMinutes === 0 && c.pendingCount > 0 && new Date().getHours() >= 17) return "waiting";
+  return "idle";
 }

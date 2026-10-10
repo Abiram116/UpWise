@@ -1,25 +1,30 @@
 const GROQ_URL = "https://api.groq.com/openai/v1/chat/completions";
 const GROQ_TRANSCRIBE_URL = "https://api.groq.com/openai/v1/audio/transcriptions";
 
-// Model routing per job: a primary plus a lighter fallback. The fallback kicks in on rate
-// limits (429), server errors, timeouts or unparseable output, so a busy/limited primary
-// never means "AI unavailable". Override with secrets GROQ_MODEL_<JOB> / GROQ_FALLBACK_<JOB>.
+// Model routing per job: an ordered list of candidates. Anything that can't serve the request
+// — rate limited (429), server trouble (5xx), timeout, unparseable output, or a model that's
+// been retired / isn't on this account (404/403, "model not found") — falls through to the next
+// one, and models that turn out to be unavailable are skipped for the rest of this instance's
+// life. Override the first choice with secrets GROQ_MODEL_<JOB>.
 type Job = "analyze" | "coach" | "cheer";
-const ROUTES: Record<Job, { primary: string; fallback: string; timeoutMs: number; temperature: number }> = {
-  analyze: { primary: "openai/gpt-oss-20b", fallback: "llama-3.1-8b-instant", timeoutMs: 25_000, temperature: 0.3 },
-  coach: { primary: "openai/gpt-oss-20b", fallback: "llama-3.1-8b-instant", timeoutMs: 9_000, temperature: 0.9 },
-  // A one-line cheer has to land while the celebration is still on screen: fastest model first.
-  cheer: { primary: "llama-3.1-8b-instant", fallback: "openai/gpt-oss-20b", timeoutMs: 2_500, temperature: 1.0 },
+const GENERAL = ["openai/gpt-oss-20b", "llama-3.1-8b-instant", "llama-3.3-70b-versatile", "openai/gpt-oss-120b"];
+const ROUTES: Record<Job, { models: string[]; timeoutMs: number; temperature: number }> = {
+  analyze: { models: GENERAL, timeoutMs: 25_000, temperature: 0.3 },
+  coach: { models: GENERAL, timeoutMs: 9_000, temperature: 0.9 },
+  // A one-line cheer has to land while the celebration is still on screen.
+  cheer: { models: ["llama-3.1-8b-instant", "openai/gpt-oss-20b", "llama-3.3-70b-versatile"], timeoutMs: 2_500, temperature: 1.0 },
 };
+const unavailable = new Set<string>();
 
 export const MODELS = {
   whisper: () => Deno.env.get("GROQ_MODEL_WHISPER") ?? "whisper-large-v3-turbo",
 };
 
 function chain(job: Job): string[] {
-  const r = ROUTES[job];
-  const up = job.toUpperCase();
-  return [Deno.env.get(`GROQ_MODEL_${up}`) ?? r.primary, Deno.env.get(`GROQ_FALLBACK_${up}`) ?? r.fallback];
+  const first = Deno.env.get(`GROQ_MODEL_${job.toUpperCase()}`);
+  const all = first ? [first, ...ROUTES[job].models.filter((m) => m !== first)] : ROUTES[job].models;
+  const live = all.filter((m) => !unavailable.has(m));
+  return live.length ? live : all; // if everything was marked dead, try them all again
 }
 
 /** Transcribes a short audio/video file (Whisper decodes the audio track from mp4 fine). */
@@ -51,14 +56,21 @@ async function callOnce<T>(model: string, job: Job, system: string, user: string
       body: JSON.stringify({
         model,
         temperature: route.temperature,
-        max_tokens: maxTokens,
+        // Reasoning models spend part of the budget thinking; a tiny limit leaves no room for the answer.
+        max_tokens: model.startsWith("openai/gpt-oss") ? Math.max(maxTokens, 500) : maxTokens,
         response_format: { type: "json_object" },
         ...(model.startsWith("openai/gpt-oss") ? { reasoning_effort: "low" } : {}),
         messages: [{ role: "system", content: system }, { role: "user", content: user }],
       }),
     });
     if (r.status === 429 || r.status >= 500) throw new Retryable(`Groq ${r.status} on ${model}`);
-    if (!r.ok) throw new Error(`Groq ${r.status}: ${(await r.text()).slice(0, 200)}`);
+    if (!r.ok) {
+      const body = (await r.text()).slice(0, 300);
+      // Retired / not-on-this-account models: remember it and let the next candidate answer.
+      if (r.status === 404 || r.status === 403 || (r.status === 400 && /model/i.test(body))) { unavailable.add(model); throw new Retryable(`${model} unavailable`); }
+      if (r.status === 400 && /json_validate_failed/.test(body)) throw new Retryable(`${model} returned invalid JSON`);
+      throw new Error(`Groq ${r.status}: ${body}`);
+    }
     const j = await r.json();
     const content: string = j.choices?.[0]?.message?.content ?? "";
     const start = content.indexOf("{"), end = content.lastIndexOf("}");

@@ -15,17 +15,11 @@ export interface ItemAI {
   summary: string | null;
   key_concepts: string[];
   difficulty: "beginner" | "intermediate" | "advanced" | null;
-  prerequisites: string[];
-  why_it_matters: string | null;
-  takeaway: string | null;
   segments: { start: string; end: string; label: string }[];
-  resources: { title: string; url: string }[];
-  overlap: string | null;
   model: string | null;
   error: string | null;
   transcript_status: string | null;
   possible_duplicate: { id: string; title: string } | null;
-  related_item: { id: string; title: string } | null;
 }
 
 export interface Item {

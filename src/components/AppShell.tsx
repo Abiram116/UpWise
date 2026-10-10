@@ -1,7 +1,7 @@
 import { Suspense, useEffect, useState } from "react";
 import { NavLink, Outlet, useLocation, useNavigate } from "react-router";
 import { AnimatePresence, motion } from "motion/react";
-import { BarChart3, Home, Library, Plus, Settings } from "lucide-react";
+import { BarChart3, GalleryVertical, Home, Library, Plus, Settings } from "lucide-react";
 import { AddSheet, useAddQueue } from "./AddSheet";
 import { SessionBar } from "./SessionBar";
 import { ConnectionBanner } from "./ConnectionBanner";
@@ -13,6 +13,7 @@ import { Spinner, spring } from "./ui";
 
 const dests = [
   { to: "/", label: "Today", icon: Home },
+  { to: "/feed", label: "Scroll", icon: GalleryVertical },
   { to: "/library", label: "Library", icon: Library },
   { to: "/stats", label: "Progress", icon: BarChart3 },
   { to: "/settings", label: "Settings", icon: Settings },

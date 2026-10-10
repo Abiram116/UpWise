@@ -1,10 +1,12 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router";
 import { AnimatePresence, motion } from "motion/react";
-import { Flame, Play } from "lucide-react";
-import { useActivity, useItems, useProfile } from "../lib/api";
+import { Clock, Flame, Play } from "lucide-react";
+import { useActivity, useItems, useProfile, useSessions } from "../lib/api";
+import { loadOpens, bestSlot, fmtSlot } from "../lib/slot";
+import { settingsOf } from "../lib/notifications";
 import { heuristicPick, streak, todayMinutes, isOnBreak, breakDaySet } from "../lib/stats";
-import { useCoach, useLocalLine, type CoachCtx } from "../lib/coach";
+import { owlMoodFor, useCoach, useLocalLine, type CoachCtx } from "../lib/coach";
 import { haptic } from "../lib/haptics";
 import { FORMAT_LABEL, fmtMinutes, formatOf, isoDay } from "../lib/utils";
 import type { Item } from "../lib/types";
@@ -23,6 +25,9 @@ export function HomeScreen() {
   const activity = useActivity(90);
   const nav = useNavigate();
   const startSession = useSessionStore((s) => s.start);
+  const sessions = useSessions(30); // same query Background already runs
+  const [opens, setOpens] = useState<number[]>([]);
+  useEffect(() => { void loadOpens().then(setOpens); }, []);
   const [passed, setPassed] = useState<string[]>([]); // "Not now" — shuffles locally, no AI call
 
   const pending = useMemo(() => (items.data ?? []).filter((i) => TO_LEARN.has(i.status)), [items.data]);
@@ -55,6 +60,16 @@ export function HomeScreen() {
     return ids.map((id) => pending.find((i) => i.id === id)).filter((i): i is Item => !!i);
   }, [coach, pick, pending]);
 
+  // The study slot is learned from when you open the app and study — shown, never set. Only
+  // while it's still ahead today, the goal isn't met, and notifications are on.
+  const slot = useMemo(() => {
+    const settings = settingsOf(profile.data);
+    if (!settings.enabled || onBreak || !pick || today >= target || !sessions.data) return null;
+    const sl = bestSlot(sessions.data, opens, settings);
+    const now = new Date();
+    return sl.hour * 60 + sl.minute > now.getHours() * 60 + now.getMinutes() ? sl : null;
+  }, [profile.data, onBreak, pick, today, target, sessions.data, opens]);
+
   const localLine = useLocalLine(ctx, pick);
   const line = onBreak ? "On a break. Enjoy it — your streak's safe." : coach?.line || localLine;
   const continuing = pending.filter((i) => i.status === "in_progress" && i.id !== pick?.id);
@@ -66,7 +81,7 @@ export function HomeScreen() {
         <div className="row between">
           <motion.button className="owl-btn" aria-label="Say something else" whileTap={{ scale: 0.9, rotate: -6 }} transition={spring}
             onClick={() => { haptic.select(); void refresh(); }}>
-            <Owl size={58} alive mood={loading ? "think" : onBreak ? "sleepy" : today >= target ? "happy" : (ctx?.idleDays ?? 0) >= 4 ? "sleepy" : "idle"}
+            <Owl size={58} alive mood={owlMoodFor(ctx, { loading, onBreak })}
               speakKey={line} speakMs={Math.min(2600, 700 + line.length * 38)} />
           </motion.button>
           <div className="row" style={{ gap: 8 }}>
@@ -100,6 +115,7 @@ export function HomeScreen() {
                     {pick.estimated_minutes != null && <span>~{fmtMinutes(pick.estimated_minutes)}</span>}
                     {pick.category?.name && <span>{pick.category.name}</span>}
                   </p>
+                  {pick.ai?.summary && <p className="body clamp-2" style={{ color: "var(--on-surface-2)" }}>{pick.ai.summary}</p>}
                 </div>
               </button>
               {nextUp.length > 0 && (
@@ -120,6 +136,9 @@ export function HomeScreen() {
                 </Pill>
                 {pending.length > 1 && <Pill variant="text" size="lg" onClick={() => setPassed((p) => [...p, pick.id])}>Not now</Pill>}
               </div>
+              {slot && (
+                <p className="meta row" style={{ gap: 6, marginTop: 14 }}><Clock size={14} /> I'll nudge you around {fmtSlot(slot)}{slot.learned ? " — that's when you usually learn" : ""}</p>
+              )}
             </motion.section>
           </Rise>
         ) : (

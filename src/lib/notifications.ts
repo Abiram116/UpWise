@@ -5,6 +5,7 @@ import {
 import { isAndroid, isMobile, isTauri } from "./platform";
 import { activeHours, breakDaySet, heuristicPick, isOnBreak, streak, todayMinutes, weekly } from "./stats";
 import { logNotification } from "./api";
+import { bestSlot } from "./slot";
 import { fmtMinutes, pluralize } from "./utils";
 import type { CoachResult, DailyActivity, Item, LearningSession, NotificationSettings, Profile } from "./types";
 import { DEFAULT_NOTIFICATIONS } from "./config";
@@ -76,6 +77,8 @@ export interface PlanInput {
   sessions: LearningSession[];
   coach: CoachResult | null;
   activity?: DailyActivity[];
+  /** Per-hour "app opened" votes — one input to the learned study slot. */
+  opens?: number[];
 }
 
 interface Planned { id: number; at: Date; title: string; body: string; itemId: string | null; actions?: string; kind: string }
@@ -99,12 +102,6 @@ function daysSinceActive(items: Item[], sessions: LearningSession[]): number | n
 function morningTime(sessions: LearningSession[]): [number, number] {
   const early = activeHours(sessions).filter((h) => h >= 5 && h <= 11).sort((a, b) => a - b)[0];
   return early != null ? [early, 0] : [8, 30];
-}
-
-/** When you usually learn in the evening, else 20:30. Never after 22:00. */
-function eveningTime(sessions: LearningSession[]): [number, number] {
-  const h = activeHours(sessions).find((x) => x >= 17 && x <= 21);
-  return h != null ? [h, 30] : [20, 30];
 }
 
 function planFor(input: PlanInput, now: Date): Planned[] {
@@ -160,14 +157,16 @@ function planFor(input: PlanInput, now: Date): Planned[] {
       });
     }
 
-    // ---- evening: only if the goal isn't already met ----
+    // ---- study slot: the hour you're usually here and learning (learned, never set), only
+    // when today's goal isn't met — and skipped when it lands next to the morning plan ----
     const left = d === 0 ? target - doneToday : target;
-    if (left > 0) {
-      const [eh, em] = eveningTime(sessions);
+    const slot = bestSlot(sessions, input.opens ?? [], settingsOf(profile));
+    const nearMorning = Math.abs(slot.hour * 60 + slot.minute - (mh * 60 + mm)) < 90;
+    if (left > 0 && !nearMorning) {
       const fit = [...pending].filter((i) => est(i) <= Math.max(left, 10)).sort((a, b) => est(b) - est(a))[0] ?? shortest;
       out.push({
-        id: 1200 + d, at: at(now, d, eh, em), itemId: fit.id, actions: ACTIONS.plan, kind: "evening_goal",
-        title: st > 1 && d === 0 ? `Keep your ${st}-day streak` : d === 0 && doneToday > 0 ? `${left} min to today's goal` : "Still time today",
+        id: 1200 + d, at: at(now, d, slot.hour, slot.minute), itemId: fit.id, actions: ACTIONS.plan, kind: "study_slot",
+        title: st > 1 && d === 0 ? `Keep your ${st}-day streak` : "Your study slot",
         body: `${titleOf(fit)} fits in ~${fmtMinutes(est(fit))}.`,
       });
     }

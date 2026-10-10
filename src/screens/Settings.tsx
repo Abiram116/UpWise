@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { Bell, ChevronRight, Coffee, Download, Moon, Palette, RefreshCw, Target, User } from "lucide-react";
 import { useActivity, useProfile, useUpdateProfile, useItems, useSessions } from "../lib/api";
+import { loadOpens } from "../lib/slot";
 import { ensurePermission, replanNotifications, settingsOf } from "../lib/notifications";
 import { describeError, isNetworkError } from "../lib/errors";
 import "../lib/android-bridge";
@@ -53,7 +54,7 @@ export function SettingsScreen() {
     try { await update.mutateAsync({ settings: next }); }
     catch (e) { fail("Couldn't save that")(e); return; }
     if (p && items.data && sessions.data) {
-      const n = await replanNotifications({ profile: { ...p, settings: next }, items: items.data, sessions: sessions.data, coach, activity: activity.data });
+      const n = await replanNotifications({ profile: { ...p, settings: next }, items: items.data, sessions: sessions.data, coach, activity: activity.data, opens: await loadOpens() });
       if (patch.enabled !== undefined) toast(patch.enabled ? (onBreak ? "On — they'll start when your break ends" : `On · ${pluralize(n, "notification")} planned for the next 2 days`) : "Notifications off");
     }
   };

@@ -6,7 +6,7 @@ import { motion, useAnimationControls, useReducedMotion } from "motion/react";
 //
 // Alive: wanders its gaze, blinks at random, bobs. Moods change how it looks, `speakKey` makes
 // it hop and chatter its beak when it has something new to say.
-export type OwlMood = "idle" | "happy" | "think" | "sleepy";
+export type OwlMood = "idle" | "happy" | "think" | "sleepy" | "waiting";
 
 const C = { bg0: "#52CC92", bg1: "#1B7A58", head: "#0E5C40", cream: "#FFF7E8", pupil: "#0E2B20", beak0: "#FFC24F", beak1: "#F28E1F", shine: "#FFE0A0", blush: "#FF8A7A", lid: "#2A8465" };
 const EYES = [356, 668] as const;
@@ -31,7 +31,7 @@ export function Owl({ size = 40, mood = "idle", alive = false, face = true, spea
 
   // Wander: a new glance every few seconds, never the same spot twice running.
   useEffect(() => {
-    if (!live || mood === "think" || mood === "happy") return;
+    if (!live || mood === "think" || mood === "happy" || mood === "waiting") return;
     let t: number, last = 0;
     const next = () => {
       let i = Math.floor(Math.random() * GAZE.length);
@@ -55,6 +55,15 @@ export function Owl({ size = 40, mood = "idle", alive = false, face = true, spea
     return () => window.clearTimeout(t);
   }, [live, mood, blink]);
 
+  // Waking up: coming out of sleepy, it startles awake and hops.
+  const prevMood = useRef(mood);
+  useEffect(() => {
+    if (prevMood.current === "sleepy" && mood !== "sleepy" && !reduce) {
+      void hop.start({ y: [0, -size * 0.22, 0, -size * 0.08, 0], rotate: [0, -8, 8, 0], transition: { duration: 0.8 } });
+    }
+    prevMood.current = mood;
+  }, [mood, reduce, size, hop]);
+
   // Speaking: a squash-and-stretch hop, then the beak chatters for roughly as long as the line takes to read in.
   const first = useRef(true);
   useEffect(() => {
@@ -66,12 +75,18 @@ export function Owl({ size = 40, mood = "idle", alive = false, face = true, spea
     return () => window.clearTimeout(t);
   }, [speakKey, speakMs, reduce, size, hop]);
 
-  const pupil = mood === "think"
+  const pupil = mood === "waiting"
+    // Waiting for you: pupils settle straight at the viewer, a touch low.
+    ? { x: -GAZE[0][0], y: 22 - GAZE[0][1], transition: { type: "spring" as const, stiffness: 90, damping: 18 } }
+    : mood === "think"
     ? { x: [40, 0, -40, 0, 40], y: [0, -40, 0, 40, 0], transition: { duration: 1.4, repeat: Infinity, ease: "linear" as const } }
     : { x: gaze[0] - GAZE[0][0], y: gaze[1] - GAZE[0][1], transition: { type: "spring" as const, stiffness: 140, damping: 16 } };
 
   return (
-    <motion.div animate={live ? { y: [0, -size * 0.045, 0] } : undefined} transition={live ? { duration: 3.6, repeat: Infinity, ease: "easeInOut" } : undefined} style={{ width: size, height: size, lineHeight: 0 }}>
+    <motion.div
+      animate={live ? (mood === "waiting" ? { y: [0, -size * 0.03, 0], rotate: [0, -7, 0, 7, 0] } : { y: [0, -size * 0.045, 0] }) : undefined}
+      transition={live ? { y: { duration: 3.6, repeat: Infinity, ease: "easeInOut" }, rotate: { duration: 6, repeat: Infinity, ease: "easeInOut" } } : undefined}
+      style={{ width: size, height: size, lineHeight: 0 }}>
       <motion.svg width={size} height={size} viewBox="0 0 1024 1024" animate={hop} aria-hidden style={{ overflow: "visible", transformOrigin: "50% 80%" }}>
         <defs>
           <linearGradient id={`${id}bg`} x1="0" y1="0" x2="1" y2="1"><stop offset="0" stopColor={C.bg0} /><stop offset="1" stopColor={C.bg1} /></linearGradient>
@@ -101,6 +116,11 @@ export function Owl({ size = 40, mood = "idle", alive = false, face = true, spea
                 initial={{ scaleY: 0.2 }} animate={{ scaleY: 1 }} transition={{ duration: 0.8 }} style={{ transformOrigin: `${x}px ${EY - R}px` }} />
             )}
           </motion.g>
+        ))}
+
+        {mood === "sleepy" && live && [0, 1, 2].map((i) => (
+          <motion.text key={i} x="790" y="300" fontSize={130 - i * 14} fontWeight="800" fill={C.cream} fontFamily="system-ui, sans-serif"
+            initial={{ opacity: 0 }} animate={{ opacity: [0, 0.95, 0], y: [0, -150], x: [0, 40] }} transition={{ duration: 2.6, repeat: Infinity, delay: i * 0.85, ease: "easeOut" }}>z</motion.text>
         ))}
 
         <motion.g animate={talking ? { scaleY: [1, 0.78, 1, 0.86, 1, 0.8, 1] } : { scaleY: 1 }} transition={talking ? { duration: 0.55, repeat: Infinity } : { duration: 0.15 }} style={{ transformOrigin: "512px 572px" }}>
