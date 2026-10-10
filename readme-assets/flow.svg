@@ -10,13 +10,7 @@
 
   <!-- step 2: read honestly, by an owl who actually cares -->
   <rect x="340" y="30" width="220" height="160" rx="32" fill="#f5dcc4"/>
-  <circle cx="431" cy="98" r="15" fill="#fffaf2"/>
-  <circle cx="434" cy="95" r="6.4" fill="#4a2a10"/>
-  <circle cx="431.5" cy="92.5" r="1.9" fill="#fffaf2"/>
-  <circle cx="469" cy="98" r="15" fill="#fffaf2"/>
-  <circle cx="472" cy="95" r="6.4" fill="#4a2a10"/>
-  <circle cx="469.5" cy="92.5" r="1.9" fill="#fffaf2"/>
-  <path d="M 442 122 Q 450 119 458 122 Q 454 132.5 450 136 Q 446 132.5 442 122 Z" fill="#9a5b2a"/>
+  <svg x="392" y="44" width="116" height="116" viewBox="0 0 1024 1024"><defs><linearGradient id="fbg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#52CC92"/><stop offset="1" stop-color="#1B7A58"/></linearGradient><radialGradient id="fgl" cx=".3" cy=".22" r=".8"><stop offset="0" stop-color="#fff" stop-opacity=".28"/><stop offset="1" stop-color="#fff" stop-opacity="0"/></radialGradient><linearGradient id="fbk" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#FFC24F"/><stop offset="1" stop-color="#F28E1F"/></linearGradient></defs><path d="M270 232 L404 300 C466 280 558 280 620 300 L754 232 C812 330 848 430 848 540 C848 696 706 800 512 800 C318 800 176 696 176 540 C176 430 212 330 270 232 Z" fill="#0E5C40" fill-opacity=".55" stroke="#0E5C40" stroke-opacity=".55" stroke-width="26" stroke-linejoin="round"/><circle cx="356" cy="500" r="152" fill="#0F4A35" opacity=".35"/><circle cx="356" cy="500" r="142" fill="#FFF7E8"/><circle cx="382" cy="474" r="64" fill="#0E2B20"/><circle cx="360" cy="450" r="20" fill="#FFF7E8"/><circle cx="404" cy="494" r="8" fill="#FFF7E8" opacity=".85"/><circle cx="668" cy="500" r="152" fill="#0F4A35" opacity=".35"/><circle cx="668" cy="500" r="142" fill="#FFF7E8"/><circle cx="694" cy="474" r="64" fill="#0E2B20"/><circle cx="672" cy="450" r="20" fill="#FFF7E8"/><circle cx="716" cy="494" r="8" fill="#FFF7E8" opacity=".85"/><path d="M448 572 Q512 544 576 572 Q562 650 512 706 Q462 650 448 572 Z" fill="url(#fbk)"/><path d="M474 634 Q512 618 550 634 Q536 676 512 706 Q488 676 474 634 Z" fill="#F28E1F" opacity=".55"/><path d="M480 580 Q512 568 536 578 Q520 584 500 600 Z" fill="#FFE0A0" opacity=".9"/></svg>
   <text x="450" y="172" text-anchor="middle" font-family="system-ui, sans-serif" font-size="15" font-weight="600" fill="#4a2a10">Reads it, tells you</text>
 
   <path d="M 580 110 C 610 110, 610 110, 640 110" stroke="#67635d" stroke-width="3" stroke-linecap="round" stroke-dasharray="2 12" opacity="0.5"/>

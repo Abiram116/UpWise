@@ -10,14 +10,7 @@
   <path d="M 260 150 L 400 150" stroke="#2f6a52" stroke-width="3" stroke-linecap="round" stroke-dasharray="2 14" opacity="0.45"/>
 
   <!-- brand mark: the UpWise owl -->
-  <rect x="400" y="96" width="108" height="108" rx="32" fill="#2f6a52"/>
-  <circle cx="428" cy="140" r="15" fill="#f4efe6"/>
-  <circle cx="431" cy="137" r="6.4" fill="#153a2b"/>
-  <circle cx="428.5" cy="134.5" r="1.9" fill="#f4efe6"/>
-  <circle cx="480" cy="140" r="15" fill="#f4efe6"/>
-  <circle cx="483" cy="137" r="6.4" fill="#153a2b"/>
-  <circle cx="480.5" cy="134.5" r="1.9" fill="#f4efe6"/>
-  <path d="M 447 163 Q 454 160.4 461 163 Q 458 172.5 454 176 Q 450 172.5 447 163 Z" fill="#e9a66b"/>
+  <svg x="394" y="90" width="120" height="120" viewBox="0 0 1024 1024"><defs><linearGradient id="hbg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#52CC92"/><stop offset="1" stop-color="#1B7A58"/></linearGradient><radialGradient id="hgl" cx=".3" cy=".22" r=".8"><stop offset="0" stop-color="#fff" stop-opacity=".28"/><stop offset="1" stop-color="#fff" stop-opacity="0"/></radialGradient><linearGradient id="hbk" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#FFC24F"/><stop offset="1" stop-color="#F28E1F"/></linearGradient></defs><rect width="1024" height="1024" rx="232" fill="url(#hbg)"/><rect width="1024" height="1024" rx="232" fill="url(#hgl)"/><path d="M270 232 L404 300 C466 280 558 280 620 300 L754 232 C812 330 848 430 848 540 C848 696 706 800 512 800 C318 800 176 696 176 540 C176 430 212 330 270 232 Z" fill="#0E5C40" fill-opacity=".55" stroke="#0E5C40" stroke-opacity=".55" stroke-width="26" stroke-linejoin="round"/><circle cx="356" cy="500" r="152" fill="#0F4A35" opacity=".35"/><circle cx="356" cy="500" r="142" fill="#FFF7E8"/><circle cx="382" cy="474" r="64" fill="#0E2B20"/><circle cx="360" cy="450" r="20" fill="#FFF7E8"/><circle cx="404" cy="494" r="8" fill="#FFF7E8" opacity=".85"/><circle cx="668" cy="500" r="152" fill="#0F4A35" opacity=".35"/><circle cx="668" cy="500" r="142" fill="#FFF7E8"/><circle cx="694" cy="474" r="64" fill="#0E2B20"/><circle cx="672" cy="450" r="20" fill="#FFF7E8"/><circle cx="716" cy="494" r="8" fill="#FFF7E8" opacity=".85"/><path d="M448 572 Q512 544 576 572 Q562 650 512 706 Q462 650 448 572 Z" fill="url(#hbk)"/><path d="M474 634 Q512 618 550 634 Q536 676 512 706 Q488 676 474 634 Z" fill="#F28E1F" opacity=".55"/><path d="M480 580 Q512 568 536 578 Q520 584 500 600 Z" fill="#FFE0A0" opacity=".9"/></svg>
 
   <!-- connecting flow -->
   <path d="M 508 150 L 620 150" stroke="#2f6a52" stroke-width="3" stroke-linecap="round" stroke-dasharray="2 14" opacity="0.45"/>

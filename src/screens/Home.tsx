@@ -66,7 +66,8 @@ export function HomeScreen() {
         <div className="row between">
           <motion.button className="owl-btn" aria-label="Say something else" whileTap={{ scale: 0.9, rotate: -6 }} transition={spring}
             onClick={() => { haptic.select(); void refresh(); }}>
-            <Owl size={46} blink={!loading} />
+            <Owl size={58} alive mood={loading ? "think" : onBreak ? "sleepy" : today >= target ? "happy" : (ctx?.idleDays ?? 0) >= 4 ? "sleepy" : "idle"}
+              speakKey={line} speakMs={Math.min(2600, 700 + line.length * 38)} />
           </motion.button>
           <div className="row" style={{ gap: 8 }}>
             {st > 0 && <span className="stat-pill" style={{ color: "var(--warm)" }}><Flame size={15} strokeWidth={2.4} /><b className="num">{st}</b></span>}

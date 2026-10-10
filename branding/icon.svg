@@ -1,14 +1,1 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024">
-  <!-- UpWise owl: two eyes glancing up-right (curious, looking ahead), apricot beak, on sage -->
-  <rect x="0" y="0" width="1024" height="1024" rx="232" fill="#2F6A52"/>
-
-  <circle cx="370" cy="480" r="136" fill="#F4EFE6"/>
-  <circle cx="396" cy="450" r="58" fill="#153A2B"/>
-  <circle cx="376" cy="428" r="17" fill="#F4EFE6"/>
-
-  <circle cx="654" cy="480" r="136" fill="#F4EFE6"/>
-  <circle cx="680" cy="450" r="58" fill="#153A2B"/>
-  <circle cx="660" cy="428" r="17" fill="#F4EFE6"/>
-
-  <path d="M474 606 Q512 592 550 606 Q534 656 512 676 Q490 656 474 606 Z" fill="#E9A66B"/>
-</svg>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024"><defs><linearGradient id="bg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#52CC92"/><stop offset="1" stop-color="#1B7A58"/></linearGradient><radialGradient id="gl" cx=".3" cy=".22" r=".8"><stop offset="0" stop-color="#fff" stop-opacity=".28"/><stop offset="1" stop-color="#fff" stop-opacity="0"/></radialGradient><linearGradient id="bk" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#FFC24F"/><stop offset="1" stop-color="#F28E1F"/></linearGradient></defs><rect width="1024" height="1024" rx="232" fill="url(#bg)"/><rect width="1024" height="1024" rx="232" fill="url(#gl)"/><path d="M270 232 L404 300 C466 280 558 280 620 300 L754 232 C812 330 848 430 848 540 C848 696 706 800 512 800 C318 800 176 696 176 540 C176 430 212 330 270 232 Z" fill="#0E5C40" fill-opacity=".55" stroke="#0E5C40" stroke-opacity=".55" stroke-width="26" stroke-linejoin="round"/><circle cx="356" cy="500" r="152" fill="#0F4A35" opacity=".35"/><circle cx="356" cy="500" r="142" fill="#FFF7E8"/><circle cx="382" cy="474" r="64" fill="#0E2B20"/><circle cx="360" cy="450" r="20" fill="#FFF7E8"/><circle cx="404" cy="494" r="8" fill="#FFF7E8" opacity=".85"/><circle cx="668" cy="500" r="152" fill="#0F4A35" opacity=".35"/><circle cx="668" cy="500" r="142" fill="#FFF7E8"/><circle cx="694" cy="474" r="64" fill="#0E2B20"/><circle cx="672" cy="450" r="20" fill="#FFF7E8"/><circle cx="716" cy="494" r="8" fill="#FFF7E8" opacity=".85"/><path d="M448 572 Q512 544 576 572 Q562 650 512 706 Q462 650 448 572 Z" fill="url(#bk)"/><path d="M474 634 Q512 618 550 634 Q536 676 512 706 Q488 676 474 634 Z" fill="#F28E1F" opacity=".55"/><path d="M480 580 Q512 568 536 578 Q520 584 500 600 Z" fill="#FFE0A0" opacity=".9"/></svg>
