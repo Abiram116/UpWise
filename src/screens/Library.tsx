@@ -33,6 +33,7 @@ export function LibraryScreen() {
       const s = q.toLowerCase();
       l = l.filter((i) =>
         (i.title ?? "").toLowerCase().includes(s) ||
+        (i.notes ?? "").toLowerCase().includes(s) ||
         i.tags.some((t) => t.includes(s)) ||
         (i.ai?.summary ?? "").toLowerCase().includes(s) ||
         (i.ai?.key_concepts ?? []).some((c) => c.toLowerCase().includes(s)) ||
@@ -71,9 +72,9 @@ export function LibraryScreen() {
         <div className="col" style={{ gap: 12 }}>
           <div className="searchbar">
             <Search size={18} strokeWidth={2} />
-            <input className="input" placeholder="Search titles, concepts, even transcripts" value={q} onChange={(e) => setQ(e.target.value)} enterKeyHint="search" />
+            <input className="input" placeholder="Search titles, notes, even transcripts" value={q} onChange={(e) => setQ(e.target.value)} enterKeyHint="search" />
           </div>
-          <Segmented value={filter} onChange={(v) => set("f", v)} options={[{ value: "todo", label: "To learn" }, { value: "done", label: "Done" }, { value: "links", label: "Links" }, { value: "all", label: "All" }]} />
+          <Segmented value={filter} onChange={(v) => set("f", v)} options={[{ value: "todo", label: "To learn" }, { value: "done", label: "Done" }, { value: "links", label: "Saved" }, { value: "all", label: "All" }]} />
           {!!cats.data?.length && (
             <div className="chips-scroll">
               {[...cats.data].sort((a, b) => (counts.get(b.id) ?? 0) - (counts.get(a.id) ?? 0)).map((c) => {
@@ -89,8 +90,8 @@ export function LibraryScreen() {
       {!items.data && items.isError ? <ErrorState error={items.error} onRetry={() => items.refetch()} /> : items.isPending ? (
         <div className="col">{[0, 1, 2, 3].map((i) => <Skeleton key={i} h={64} r={18} />)}</div>
       ) : list.length === 0 ? (
-        <Empty title={q ? "No matches" : filter === "done" ? "Nothing finished yet" : filter === "links" ? "No saved links" : "All clear"}
-          body={q ? "Try a different search." : filter === "done" ? "Finish something and it lands here." : filter === "links" ? "Websites and tools you share land here — kept, no AI." : "Share a video, reel or article to get started."} />
+        <Empty title={q ? "No matches" : filter === "done" ? "Nothing finished yet" : filter === "links" ? "Nothing saved yet" : "All clear"}
+          body={q ? "Try a different search." : filter === "done" ? "Finish something and it lands here." : filter === "links" ? "Notes, reference reels and websites land here — kept, never in your study list." : "Share a video, reel or article to get started."} />
       ) : (
         <motion.div className="rows" variants={stagger} initial="hidden" animate="show" key={`${filter}-${cat}-${debouncedQ}`}>
           {list.map((i) => <ItemRow key={i.id} item={i} />)}

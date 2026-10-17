@@ -1,19 +1,24 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router";
 import { AnimatePresence, motion } from "motion/react";
-import { Clock, Flame, Play } from "lucide-react";
+import { Clock, Flame, Play, Shield, Snowflake } from "lucide-react";
 import { useActivity, useItems, useProfile, useSessions } from "../lib/api";
 import { loadOpens, bestSlot, fmtSlot } from "../lib/slot";
 import { settingsOf } from "../lib/notifications";
-import { heuristicPick, streak, todayMinutes, isOnBreak, breakDaySet } from "../lib/stats";
+import { heuristicPick, todayMinutes, isOnBreak } from "../lib/stats";
+import { startItem } from "../lib/startItem";
+import { isDesktop } from "../lib/platform";
 import { owlMoodFor, useCoach, useLocalLine, type CoachCtx } from "../lib/coach";
 import { haptic } from "../lib/haptics";
 import { FORMAT_LABEL, fmtMinutes, formatOf, isoDay } from "../lib/utils";
 import type { Item } from "../lib/types";
 import { ItemRow, FormatIcon } from "../components/ItemCard";
 import { Owl } from "../components/BrandMark";
+import { StreakSheet } from "../components/StreakSheet";
+import { OwlPersonaSheet } from "../components/OwlPersona";
+import { useStreak } from "../lib/useStreak";
 import { useSessionStore } from "../components/SessionBar";
-import { ErrorState, Page, Pill, Rise, Skeleton, spring, stagger } from "../components/ui";
+import { ErrorState, Page, Pill, Rise, Skeleton, spring, stagger, useToast } from "../components/ui";
 
 const TO_LEARN = new Set(["inbox", "queued", "in_progress"]);
 
@@ -22,8 +27,9 @@ function daysSince(iso: string) { return Math.floor((Date.now() - new Date(iso).
 export function HomeScreen() {
   const profile = useProfile();
   const items = useItems();
-  const activity = useActivity(90);
+  const activity = useActivity(400);
   const nav = useNavigate();
+  const toast = useToast();
   const startSession = useSessionStore((s) => s.start);
   const sessions = useSessions(30); // same query Background already runs
   const [opens, setOpens] = useState<number[]>([]);
@@ -35,7 +41,10 @@ export function HomeScreen() {
   const onBreak = isOnBreak(profile.data?.settings);
   const target = profile.data?.daily_target_minutes ?? 30;
   const today = activity.data ? todayMinutes(activity.data) : 0;
-  const st = activity.data ? streak(activity.data, breakDaySet(profile.data?.settings)).current : 0;
+  const streakInfo = useStreak();
+  const st = streakInfo?.current ?? 0;
+  const [streakOpen, setStreakOpen] = useState(false);
+  const [personaOpen, setPersonaOpen] = useState(false);
 
   const ctx: CoachCtx | undefined = useMemo(() => {
     if (!items.data || !activity.data) return undefined;
@@ -49,7 +58,7 @@ export function HomeScreen() {
     };
   }, [items.data, activity.data, today, target, st, pending.length]);
 
-  const { coach, refresh, loading } = useCoach(!onBreak, ctx, pendingIds);
+  const { coach, hasNext, reveal, loading } = useCoach(!onBreak, ctx, pendingIds);
   const pick: Item | null = useMemo(() => {
     const pool = pending.filter((i) => !passed.includes(i.id));
     const fromCoach = !passed.length && coach?.pick_item_id ? pool.find((i) => i.id === coach.pick_item_id) : null;
@@ -79,13 +88,18 @@ export function HomeScreen() {
     <Page>
       <header className="col" style={{ gap: 18 }}>
         <div className="row between">
-          <motion.button className="owl-btn" aria-label="Say something else" whileTap={{ scale: 0.9, rotate: -6 }} transition={spring}
-            onClick={() => { haptic.select(); void refresh(); }}>
-            <Owl size={58} alive mood={owlMoodFor(ctx, { loading, onBreak })}
+          <div className="owl-btn" role="button" aria-label={hasNext ? "Hear the owl's new thought" : "Your owl"}>
+            <Owl size={58} alive interactive onLongPress={() => setPersonaOpen(true)} onTap={() => { if (hasNext) reveal(); }} mood={owlMoodFor(ctx, { loading, onBreak })}
               speakKey={line} speakMs={Math.min(2600, 700 + line.length * 38)} />
-          </motion.button>
+            {hasNext && <motion.span className="owl-dot" initial={{ scale: 0 }} animate={{ scale: [1, 1.25, 1] }} transition={{ duration: 1.6, repeat: Infinity }} />}
+          </div>
           <div className="row" style={{ gap: 8 }}>
-            {st > 0 && <span className="stat-pill" style={{ color: "var(--warm)" }}><Flame size={15} strokeWidth={2.4} /><b className="num">{st}</b></span>}
+            {streakInfo && (st > 0 || streakInfo.bank > 0) && (
+              <button className="stat-pill" data-ice={streakInfo.onIce} style={streakInfo.onIce ? undefined : { color: "var(--warm)" }} onClick={() => { haptic.select(); setStreakOpen(true); }} aria-label={`${st} day streak, ${streakInfo.bank} freeze days banked`}>
+                {streakInfo.onIce ? <Snowflake size={15} strokeWidth={2.4} /> : <Flame size={15} strokeWidth={2.4} />}<b className="num">{st}</b>
+                {streakInfo.bank > 0 && <span className="row" style={{ gap: 2, color: "#4FA6E8" }}><Shield size={13} strokeWidth={2.4} /><b className="num" style={{ color: "inherit" }}>{streakInfo.bank}</b></span>}
+              </button>
+            )}
             {!onBreak && <GoalRing minutes={today} target={target} onClick={() => nav("/stats")} />}
           </div>
         </div>
@@ -131,7 +145,7 @@ export function HomeScreen() {
                 </div>
               )}
               <div className="row" style={{ gap: 8, marginTop: 20 }}>
-                <Pill variant="filled" size="lg" className="grow" onClick={async () => { await startSession(pick); nav(`/item/${pick.id}`); }}>
+                <Pill variant="filled" size="lg" className="grow" onClick={() => { startItem(pick, startSession, toast, { open: !(isDesktop() && formatOf(pick) === "video") }); nav(`/item/${pick.id}`); }}>
                   <Play size={18} fill="currentColor" /> Start
                 </Pill>
                 {pending.length > 1 && <Pill variant="text" size="lg" onClick={() => setPassed((p) => [...p, pick.id])}>Not now</Pill>}
@@ -145,6 +159,8 @@ export function HomeScreen() {
           <Rise><p className="body-lg" style={{ color: "var(--on-surface-2)" }}>Share a video, reel or article to UpWise from any app — or tap + to paste a link.</p></Rise>
         )}
 
+      <OwlPersonaSheet open={personaOpen} onClose={() => setPersonaOpen(false)} />
+      {streakInfo && <StreakSheet open={streakOpen} onClose={() => setStreakOpen(false)} s={streakInfo} />}
       {continuing.length > 0 && <Section title="Continue" items={continuing} />}
       {recent.length > 0 && <Section title="Recently saved" items={recent} more={pending.length > 5 ? () => nav("/library") : undefined} />}
     </Page>

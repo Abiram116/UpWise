@@ -1,4 +1,12 @@
 <resources>
     <string name="app_name">"UpWise"</string>
     <string name="main_activity_title">"UpWise"</string>
+    <string name="sc_scroll_short">"Scroll"</string>
+    <string name="sc_scroll_long">"Scroll through your saves"</string>
+    <string name="sc_note_short">"New note"</string>
+    <string name="sc_note_long">"Jot a note or topic"</string>
+    <string name="sc_link_short">"Save a link"</string>
+    <string name="sc_link_long">"Save a link to UpWise"</string>
+    <string name="sc_today_short">"Today"</string>
+    <string name="sc_today_long">"What to learn now"</string>
 </resources>

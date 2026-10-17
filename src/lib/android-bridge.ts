@@ -13,8 +13,13 @@ declare global {
       openInstallPermissionSettings?: () => void;
       openNotificationSettings?: () => void;
       moveToBackground?: () => void;
+      sessionStart?: (title: string, startedAtMs: number, itemId: string) => void;
+      sessionStop?: () => void;
     };
     /** Called by MainActivity on the system back gesture; true = handled in-app. */
     __upwiseBack?: () => boolean;
+    /** Launcher shortcuts: MainActivity asks the page to open "feed" | "note" | "link" | "today". */
+    __upwiseGo?: (target: string, token?: string) => void;
+    __upwisePendingGo?: { t: string; k: string };
   }
 }

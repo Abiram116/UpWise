@@ -1,8 +1,10 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Bell, ChevronRight, Coffee, Download, Moon, Palette, RefreshCw, Target, User } from "lucide-react";
 import { useActivity, useProfile, useUpdateProfile, useItems, useSessions } from "../lib/api";
 import { loadOpens } from "../lib/slot";
-import { ensurePermission, replanNotifications, settingsOf } from "../lib/notifications";
+import { Owl, PERSONAS, useOwlPersona } from "../components/BrandMark";
+import { OwlPersonaSheet } from "../components/OwlPersona";
+import { ensurePermission, previewPlan, replanNotifications, settingsOf } from "../lib/notifications";
 import { describeError, isNetworkError } from "../lib/errors";
 import "../lib/android-bridge";
 import { checkForUpdate, currentVersion, type UpdateInfo } from "../lib/updater";
@@ -16,6 +18,11 @@ import type { Profile } from "../lib/types";
 import { useCoach } from "../lib/coach";
 import { Chip, ErrorState, Page, Pill, Rise, Segmented, Sheet, Skeleton, Switch, useToast } from "../components/ui";
 
+const when = (d: Date) => {
+  const t = d.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" });
+  const days = Math.round((new Date(d).setHours(0, 0, 0, 0) - new Date().setHours(0, 0, 0, 0)) / 86400e3);
+  return `${days === 0 ? "Today" : days === 1 ? "Tomorrow" : d.toLocaleDateString(undefined, { weekday: "short" })} ${t}`;
+};
 const TARGETS = [15, 30, 45, 60, 90];
 
 export function SettingsScreen() {
@@ -23,7 +30,7 @@ export function SettingsScreen() {
   const update = useUpdateProfile();
   const items = useItems();
   const sessions = useSessions(30);
-  const activity = useActivity(14);
+  const activity = useActivity(400);
   const toast = useToast();
   const { coach } = useCoach(false);
   const [version, setVersion] = useState("");
@@ -32,6 +39,14 @@ export function SettingsScreen() {
   const [progress, setProgress] = useState<number | null>(null);
   const [goalOpen, setGoalOpen] = useState(false);
   const [breakOpen, setBreakOpen] = useState(false);
+  const [personaOpen, setPersonaOpen] = useState(false);
+  const persona = useOwlPersona();
+  const [opens, setOpens] = useState<number[]>([]);
+  useEffect(() => { void loadOpens().then(setOpens); }, []);
+  const coming = useMemo(
+    () => (profile.data && items.data && sessions.data ? previewPlan({ profile: profile.data, items: items.data, sessions: sessions.data, coach, activity: activity.data, opens }) : []),
+    [profile.data, items.data, sessions.data, coach, activity.data, opens],
+  );
   const [palette, setPaletteState] = useState<PaletteName>(currentPalette());
   const [theme, setTheme] = useState<Theme>((localStorage.getItem("upwise:theme") as Theme) || "system");
 
@@ -104,6 +119,11 @@ export function SettingsScreen() {
             <Segmented value={palette} onChange={(p) => { setPaletteState(p); applyPalette(p); }} options={[{ value: "wallpaper", label: "Wallpaper" }, { value: "upwise", label: "UpWise" }]} />
           </div>
         )}
+        <button className="setting" onClick={() => setPersonaOpen(true)}>
+          <span className="setting-icon"><Owl size={26} persona={persona} /></span>
+          <div className="grow"><div className="title-sm">Your owl</div><div className="meta">{PERSONAS.find((x) => x.id === persona)?.name} · {PERSONAS.find((x) => x.id === persona)?.tagline}</div></div>
+          <ChevronRight size={18} className="meta" />
+        </button>
         <button className="setting" onClick={() => setBreakOpen(true)}>
           <span className="setting-icon"><Coffee size={18} /></span>
           <div className="grow">
@@ -124,6 +144,18 @@ export function SettingsScreen() {
           <div className="grow"><div className="title-sm">Smart notifications</div><div className="meta">{isTauri ? "UpWise decides when — you just get the useful ones" : "Available in the installed app"}</div></div>
           <Switch on={s.enabled} onChange={(v) => saveSettings({ enabled: v, weekly_recap: v })} label="Smart notifications" />
         </div>
+        {coming.length > 0 && (
+          <div className="col" style={{ gap: 2, padding: "6px 0 2px" }}>
+            <p className="section-title" style={{ paddingLeft: 4 }}>Coming up</p>
+            {coming.slice(0, 5).map((n) => (
+              <div key={n.id} className="row" style={{ gap: 12, minHeight: 44, alignItems: "flex-start", padding: "6px 4px" }}>
+                <span className="meta num" style={{ width: 92, flexShrink: 0, paddingTop: 1 }}>{when(n.at)}</span>
+                <div className="col" style={{ gap: 1 }}><span className="title-sm clamp-1">{n.title}</span><span className="meta clamp-2">{n.body}</span></div>
+              </div>
+            ))}
+            <p className="meta" style={{ paddingLeft: 4 }}>Scheduled on this device, 4 days ahead, refreshed every day you open the app.</p>
+          </div>
+        )}
       </Group>
 
 
@@ -136,16 +168,24 @@ export function SettingsScreen() {
         </button>
       </Group>
 
+      <OwlPersonaSheet open={personaOpen} onClose={() => setPersonaOpen(false)} />
       <Sheet open={breakOpen} onClose={() => setBreakOpen(false)} title={onBreak ? "On a break" : "Take a break"}>
         <BreakEditor
           settings={p?.settings ?? {}}
           onStart={async (until, reason) => {
-            await saveSettings({ break_started: isoDay(), break_until: until, break_reason: reason || null });
+            // Remember the previous break so its days stay neutral for the streak.
+            const prev = p?.settings;
+            const yesterday = (() => { const d = new Date(); d.setDate(d.getDate() - 1); return isoDay(d); })();
+            const prevTo = prev?.break_until && prev.break_until !== "indefinite" ? (prev.break_until < yesterday ? prev.break_until : yesterday) : yesterday;
+            const log = [...(prev?.break_log ?? []), ...(prev?.break_started && prev.break_started <= prevTo ? [{ from: prev.break_started, to: prevTo }] : [])].slice(-12);
+            await saveSettings({ break_started: isoDay(), break_until: until, break_reason: reason || null, break_log: log });
             setBreakOpen(false);
             toast("Break started — nudges are off, your streak is safe");
           }}
           onEnd={async () => {
-            await saveSettings({ break_started: null, break_until: null, break_reason: null });
+            // End it as of yesterday, keeping the start: the days already taken stay streak-neutral.
+            const y = new Date(); y.setDate(y.getDate() - 1);
+            await saveSettings({ break_until: isoDay(y), break_reason: null });
             setBreakOpen(false);
             toast("Welcome back");
           }}

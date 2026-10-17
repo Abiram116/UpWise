@@ -10,13 +10,14 @@ export function isOnBreak(settings: Profile["settings"] | undefined, today = iso
 /** Days covered by the current/last declared break, for treating them as streak-neutral. */
 export function breakDaySet(settings: Profile["settings"] | undefined): Set<string> {
   const days = new Set<string>();
+  for (const b of settings?.break_log ?? []) for (const d = new Date(`${b.from}T12:00:00`); isoDay(d) <= b.to; d.setDate(d.getDate() + 1)) days.add(isoDay(d));
   const started = settings?.break_started;
   if (!started) return days;
   const today = isoDay();
   const end = settings?.break_until === "indefinite" || !settings?.break_until
     ? today
     : settings.break_until < today ? settings.break_until : today;
-  for (let d = new Date(started); isoDay(d) <= end; d.setDate(d.getDate() + 1)) days.add(isoDay(d));
+  for (let d = new Date(`${started}T12:00:00`); isoDay(d) <= end; d.setDate(d.getDate() + 1)) days.add(isoDay(d));
   return days;
 }
 
@@ -41,25 +42,68 @@ export function heatmap(activity: DailyActivity[], weeks = 12): HeatCell[] {
   return cells;
 }
 
-export function streak(activity: DailyActivity[], breakDays?: Set<string>): { current: number; best: number } {
+// ---------- streak, with automatic freezes ----------
+// Every 4th active day in a row earns 2 freeze days (4 days → 2, 8 days → 4; 5 or 6 days earn
+// nothing extra — only whole blocks of 4). A missed day spends a freeze instead of breaking the
+// streak; with none left the streak resets. Nothing to press: it's replayed from your history,
+// so it's always consistent. Days inside a declared break don't count and don't cost.
+export type DayState = "active" | "frozen" | "missed" | "break" | "today" | "future";
+export interface StreakState {
+  current: number; best: number;
+  /** Freeze days available right now. */
+  bank: number;
+  /** Whole blocks of 4 completed in the current run. */
+  blocks: number;
+  /** Active days still needed for the next +2 freeze days (1-4). */
+  toNext: number;
+  doneToday: boolean;
+  /** Yesterday was bridged by a freeze and today isn't done yet: the streak is on ice. */
+  onIce: boolean;
+  /** The last 7 days, oldest first. */
+  week: { day: string; state: DayState }[];
+}
+
+export const FREEZE_BLOCK = 4;
+export const FREEZE_REWARD = 2;
+
+export function streakState(activity: DailyActivity[], breakDays?: Set<string>, now = new Date()): StreakState {
   const active = new Set(activity.filter((a) => a.seconds > 0 || a.completed > 0).map((a) => a.day));
   const neutral = breakDays ?? new Set<string>();
-  let current = 0;
-  const d = new Date();
-  if (!active.has(isoDay(d)) && !neutral.has(isoDay(d))) d.setDate(d.getDate() - 1); // today not yet counted, streak still alive from yesterday
-  while (active.has(isoDay(d)) || neutral.has(isoDay(d))) {
-    if (active.has(isoDay(d))) current++;
-    d.setDate(d.getDate() - 1);
+  const today = isoDay(now);
+  const first = [...active].sort()[0];
+  const cells = new Map<string, DayState>();
+  let run = 0, bank = 0, best = 0;
+  const step = (key: string) => {
+    if (active.has(key)) {
+      run++; best = Math.max(best, run); cells.set(key, "active");
+      if (run % FREEZE_BLOCK === 0) bank += FREEZE_REWARD;
+    } else if (neutral.has(key)) cells.set(key, "break");
+    else if (run === 0) cells.set(key, "missed");
+    else if (bank > 0) { bank--; cells.set(key, "frozen"); }
+    else { run = 0; cells.set(key, "missed"); }
+  };
+  if (first) {
+    for (const d = new Date(`${first}T12:00:00`); isoDay(d) < today; d.setDate(d.getDate() + 1)) step(isoDay(d));
+    if (active.has(today)) step(today);
   }
+  const yesterday = (() => { const d = new Date(now); d.setDate(d.getDate() - 1); return isoDay(d); })();
+  const doneToday = active.has(today);
+  const week: StreakState["week"] = [];
+  for (let k = 6; k >= 0; k--) {
+    const d = new Date(now); d.setDate(d.getDate() - k);
+    const key = isoDay(d);
+    week.push({ day: key, state: key === today && !doneToday ? (neutral.has(key) ? "break" : "today") : cells.get(key) ?? (neutral.has(key) ? "break" : "missed") });
+  }
+  return {
+    current: run, best: Math.max(best, run), bank, blocks: Math.floor(run / FREEZE_BLOCK),
+    toNext: FREEZE_BLOCK - (run % FREEZE_BLOCK), doneToday, onIce: !doneToday && cells.get(yesterday) === "frozen", week,
+  };
+}
 
-  let best = 0, run = 0, prev: Date | null = null;
-  for (const day of [...new Set([...active, ...neutral])].sort()) {
-    const cur = new Date(day);
-    if (!prev || cur.getTime() - prev.getTime() !== 86400e3) run = 0;
-    if (active.has(day)) { run++; best = Math.max(best, run); }
-    prev = cur;
-  }
-  return { current, best: Math.max(best, current) };
+/** Kept for callers that only need the numbers. */
+export function streak(activity: DailyActivity[], breakDays?: Set<string>): { current: number; best: number } {
+  const s = streakState(activity, breakDays);
+  return { current: s.current, best: s.best };
 }
 
 export interface WeekStat { label: string; minutes: number; completed: number; added: number; isCurrent: boolean }

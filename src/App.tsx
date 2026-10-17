@@ -8,6 +8,9 @@ import { isTauri } from "./lib/platform";
 import { getPref, setPref } from "./lib/store";
 import { flushOutbox } from "./lib/outbox";
 import { loadOpens, recordOpen } from "./lib/slot";
+import { owlPersona } from "./components/BrandMark";
+import { Splash } from "./components/Splash";
+import { useReducedMotion } from "motion/react";
 import { connection } from "./lib/connection";
 import { isNetworkError } from "./lib/errors";
 import { pluralize } from "./lib/utils";
@@ -20,9 +23,10 @@ import { HomeScreen } from "./screens/Home";
 import { useCoach } from "./lib/coach";
 import { CelebrationLayer, celebrate } from "./components/Celebrate";
 import { queryClient } from "./lib/queryClient";
+import { useStreak } from "./lib/useStreak";
 import type { Item } from "./lib/types";
 import { WhatsNewGate } from "./components/WhatsNew";
-import { useSessionStore } from "./components/SessionBar";
+import { sessionStore, useSessionStore } from "./components/SessionBar";
 import { breakDaySet, streak, todayMinutes } from "./lib/stats";
 import "./lib/android-bridge";
 
@@ -53,6 +57,9 @@ function Gate() {
   const profile = useProfile(!!session);
   // Read synchronously (not via the async Tauri store) so a returning user's app shell can
   // paint on the very first render instead of waiting on a network profile fetch every cold start.
+  const reduceMotion = useReducedMotion();
+  const [splashDone, setSplashDone] = useState(() => reduceMotion === true);
+  useEffect(() => { if (splashDone) return; const t = window.setTimeout(() => setSplashDone(true), 1250); return () => window.clearTimeout(t); }, [splashDone]);
   const [cachedOnboarded] = useState(() => { try { return localStorage.getItem(ONBOARDED_KEY) === "1"; } catch { return false; } });
 
   useEffect(() => {
@@ -60,7 +67,8 @@ function Gate() {
     try { localStorage.setItem(ONBOARDED_KEY, profile.data.onboarded ? "1" : "0"); } catch { /* ignore */ }
   }, [profile.data?.onboarded]);
 
-  if (loading) return <Center><Spinner size={26} /></Center>;
+  // Cold start: show the owl's assembly animation for a beat even when the session resumes instantly.
+  if (loading || !splashDone) return <Splash />;
   if (needsPin) return <Suspense fallback={<Center><Spinner size={26} /></Center>}><PinGate /></Suspense>;
   if (configError) {
     return (
@@ -106,7 +114,7 @@ function Background() {
   const profile = useProfile();
   const items = useItems();
   const sessions = useSessions(30);
-  const activity = useActivity(14);
+  const activity = useActivity(400);
   const { coach } = useCoach(false);
   const setStatus = useSetStatus();
   const startSession = useSessionStore((s) => s.start);
@@ -129,6 +137,9 @@ function Background() {
     // On reconnect, pull fresh data as well — anything on screen may be days old.
     return connection.onReconnect(() => { void flush(); void qc.invalidateQueries(); });
   }, [qc, toast]);
+  // The owl you picked follows you across devices: profile → the on-device store.
+  const pickedOwl = profile.data?.settings.owl_persona;
+  useEffect(() => { if (pickedOwl) owlPersona.set(pickedOwl); }, [pickedOwl]);
   // Every time the app comes to the foreground, that hour votes for being "a free moment" —
   // the study slot is learned from these plus real sessions.
   useEffect(() => {
@@ -186,6 +197,8 @@ function Background() {
       // Android can only deliver a button tap by opening the app — for the "not now" answers,
       // do the thing and step straight back out of the way.
       const back = () => window.AndroidNative?.moveToBackground?.();
+      // "Done" on the live study-session notification: finish and celebrate, no need to open anything.
+      if (action === "session-done") { void sessionStore.stop(true).catch(() => toast("Couldn't finish — open the app to stop the timer")); return; }
       if (action === "skip") {
         if (itemId && !knownGone && !resolved) {
           setStatus(itemId, "skipped").then(() => toast("Skipped"), () => toast("Couldn't skip it — try from the app"));
@@ -221,7 +234,19 @@ const STREAK_MILESTONES = [3, 7, 14, 30, 50, 100, 200, 365];
 function Celebrations() {
   const profile = useProfile();
   const items = useItems();
-  const activity = useActivity(14);
+  const activity = useActivity(400);
+  const streakInfo = useStreak();
+  const blocks = streakInfo?.blocks;
+  // Earning a block of 4 days banks 2 freeze days — say so the moment it happens. A reset run
+  // starts counting again; the first time on a device it's recorded silently.
+  useEffect(() => {
+    if (blocks === undefined) return;
+    (async () => {
+      const seen = await getPref("celebratedBlocks", -1);
+      if (seen < 0 || blocks < seen) { await setPref("celebratedBlocks", blocks); return; }
+      if (blocks > seen) { await setPref("celebratedBlocks", blocks); void celebrate({ kind: "shield", streak: streakInfo?.current }); }
+    })();
+  }, [blocks, streakInfo?.current]);
   const pendingCount = items.data?.filter((i) => i.status === "inbox" || i.status === "queued" || i.status === "in_progress").length;
   const prevPending = useRef<number | undefined>(undefined);
 

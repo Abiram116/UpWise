@@ -15,7 +15,7 @@ function Count({ to, suffix = "" }: { to: number; suffix?: string }) {
 }
 
 export function StatsScreen() {
-  const activity = useActivity(120);
+  const activity = useActivity(400);
   const items = useItems();
   const sessions = useSessions(365); // per-area minutes and "last active" need the long view
   const profile = useProfile();

@@ -1,10 +1,10 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { fetchCoach } from "./api";
 import { getPref, setPref } from "./store";
 import { useConnection } from "./connection";
 import type { CoachResult, Item } from "./types";
-import type { OwlMood } from "../components/BrandMark";
+import { owlPersona, type OwlMood } from "../components/BrandMark";
 
 // The Today line reacts to your situation instead of a timer: it's regenerated only when
 // something meaningful changed (new part of the day, finished something, hit the goal, saved
@@ -49,13 +49,40 @@ export async function remember(line: string) {
 }
 export const recentLines = () => getPref<string[]>(MEMORY_KEY, []);
 
+// The newest line the AI has written lives here, mirrored to localStorage so the *very first
+// render* of Today already has it (no empty frame → cached line → fresh line flicker). What's on
+// screen is a separate snapshot: a fresh line never replaces the one you're reading — the owl
+// shows a "new thought" dot and you tap to reveal it. It also comes in by itself on your next
+// visit to Today, after a long break away, or when the thing it was talking about is already done.
+const MIRROR = "upwise:coach";
+const readMirror = (): CoachResult | null => { try { const r = localStorage.getItem(MIRROR); return r ? (JSON.parse(r) as CoachResult) : null; } catch { return null; } };
+let latest: CoachResult | null = readMirror();
+const lsubs = new Set<() => void>();
+function setLatest(c: CoachResult) { latest = c; try { localStorage.setItem(MIRROR, JSON.stringify(c)); } catch { /* ignore */ } lsubs.forEach((l) => l()); }
+const subLatest = (l: () => void) => { lsubs.add(l); return () => { lsubs.delete(l); }; };
+const RESUME_AFTER_MS = 10 * 60_000;
+
 export function useCoach(enabled: boolean, ctx?: CoachCtx, pendingIds?: Set<string>) {
-  const [cached, setCached] = useState<CoachResult | null | undefined>(undefined);
-  useEffect(() => { getPref<CoachResult | null>("coach", null).then(setCached); }, []);
+  const newest = useSyncExternalStore(subLatest, () => latest);
+  const [shown, setShown] = useState<CoachResult | null>(() => latest);
   const conn = useConnection(); // re-evaluate "enabled" when the connection comes back, not just on data changes
   const sig = ctx ? situationSig(ctx) : "";
-  const pickGone = !!cached?.pick_item_id && !!pendingIds && !pendingIds.has(cached.pick_item_id);
-  const due = !!ctx && (cached?.sig !== sig || pickGone || !cached?.line);
+  const goneFrom = (c: CoachResult | null) => !!c?.pick_item_id && !!pendingIds && !pendingIds.has(c.pick_item_id);
+  const due = !!ctx && (newest?.sig !== sig || goneFrom(newest) || !newest?.line);
+  const hasNext = !!newest && !!shown && newest.line !== shown.line;
+
+  // Show immediately when there's nothing yet, or when the shown line talks about something that's gone.
+  useEffect(() => { if (newest && (!shown?.line || goneFrom(shown))) setShown(newest); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [newest, shown, pendingIds]);
+  // Back from a long absence: start fresh.
+  useEffect(() => {
+    let hiddenAt = 0;
+    const onVis = () => {
+      if (document.visibilityState === "hidden") hiddenAt = Date.now();
+      else if (hiddenAt && Date.now() - hiddenAt > RESUME_AFTER_MS && latest) setShown(latest);
+    };
+    document.addEventListener("visibilitychange", onVis);
+    return () => document.removeEventListener("visibilitychange", onVis);
+  }, []);
 
   const q = useQuery({
     queryKey: ["coach", sig],
@@ -64,23 +91,26 @@ export function useCoach(enabled: boolean, ctx?: CoachCtx, pendingIds?: Set<stri
       if (wait > 0) await new Promise((r) => setTimeout(r, wait));
       lastCallAt = Date.now();
       const c = await fetchCoach({
-        previousPickId: cached?.pick_item_id, todayMinutes: ctx!.todayMinutes, streak: ctx!.streak,
-        event: eventBetween(cached?.sig, ctx!), recentLines: await recentLines(),
+        previousPickId: newest?.pick_item_id, todayMinutes: ctx!.todayMinutes, streak: ctx!.streak,
+        event: eventBetween(newest?.sig, ctx!), recentLines: await recentLines(), persona: owlPersona.get(),
       });
       const withSig = { ...c, sig };
-      await setPref("coach", withSig);
       if (c.line) await remember(c.line);
-      setCached(withSig);
+      setLatest(withSig);
       return withSig;
     },
-    enabled: enabled && cached !== undefined && due && conn === "ok",
+    enabled: enabled && due && conn === "ok",
     staleTime: Infinity,
     retry: 0,
     meta: { persist: false },
   });
 
-  const coach = q.data ?? cached ?? null;
-  return { coach, loading: q.isFetching, refresh: () => q.refetch() };
+  return {
+    coach: shown, loading: q.isFetching, hasNext,
+    reveal: () => { if (latest) setShown(latest); },
+    /** Explicit "think of something else": fetch now and show it. */
+    refresh: async () => { await q.refetch(); if (latest) setShown(latest); },
+  };
 }
 
 /** Offline / before the first AI line: still sounds like a friend, still fits the moment. */

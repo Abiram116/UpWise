@@ -39,15 +39,25 @@ async function persist() {
   subs.forEach((s) => s());
 }
 
+/** A write that never answers must not hang the app: after this it counts as a network failure
+ * and goes to the queue, to be retried when the connection behaves. */
+const WRITE_TIMEOUT_MS = 12_000;
+function withTimeout<T>(p: PromiseLike<T>): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const t = setTimeout(() => reject(Object.assign(new Error("request timed out"), { name: "TimeoutError" })), WRITE_TIMEOUT_MS);
+    Promise.resolve(p).then((v) => { clearTimeout(t); resolve(v); }, (e) => { clearTimeout(t); reject(e); });
+  });
+}
+
 async function run(op: OutboxOp): Promise<void> {
   if (op.kind === "save") { await analyzeLink(op.url, { note: op.note, addedVia: op.via }); return; }
   const q = supabase.from(op.table);
   // Inserts use client-generated ids + ignoreDuplicates so a replay after an ambiguous
   // failure (request landed, response didn't) can't create a second row.
-  const { error, status } =
-    op.kind === "insert" ? await q.upsert(op.row, { onConflict: "id", ignoreDuplicates: true })
-    : op.kind === "update" ? await q.update(op.patch).eq("id", op.id)
-    : await q.delete().eq("id", op.id);
+  const { error, status } = await withTimeout(
+    op.kind === "insert" ? q.upsert(op.row, { onConflict: "id", ignoreDuplicates: true })
+    : op.kind === "update" ? q.update(op.patch).eq("id", op.id)
+    : q.delete().eq("id", op.id));
   if (error) throw Object.assign(error, { status });
 }
 

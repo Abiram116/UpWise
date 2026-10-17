@@ -9,8 +9,16 @@ import { groqJson } from "../_shared/groq.ts";
 
 interface LineOut { pick_item_id: string | null; next_item_ids?: string[]; line: string }
 
-const FRIEND = `You are UpWise — the user's friend who's into the same stuff and learns alongside them. Not a coach, not an assistant, never corporate.
-Voice: casual, warm, a little playful, sometimes teasing, always on their side. Plain words. No guilt, no lectures, no "Hey". At most one emoji, and only when it genuinely lands. Never repeat or closely paraphrase anything in RECENTLY_SAID.`;
+// The owl's personality: same friend, five different voices. Chosen in the app.
+const VOICES: Record<string, string> = {
+  classic: "Warm, curious, a little playful. Always on their side.",
+  scholar: "A dry-witted, thoughtful friend who loves a good fact. Calm, precise, gently funny. Occasionally drops a tiny piece of trivia or a tidy analogy.",
+  chill: "Ultra relaxed. Short, lowercase-ish, zero pressure, never urgent. Treats everything as no big deal, and tiny steps as great.",
+  hype: "A high-energy hype friend. Big enthusiasm, short bursts, at most one ALL-CAPS word per line, exclamation marks welcome. Never pushy about it.",
+  sassy: "Playfully teasing, affectionate roasting, loves a raised eyebrow. Never mean, never about their worth — only about the procrastinating.",
+};
+const friend = (persona?: string) => `You are UpWise — the user's friend who's into the same stuff and learns alongside them. Not a coach, not an assistant, never corporate.
+Voice: ${VOICES[persona ?? "classic"] ?? VOICES.classic} Plain words. No guilt, no lectures, no "Hey". At most one emoji, and only when it genuinely lands. Never repeat or closely paraphrase anything in RECENTLY_SAID.`;
 
 function ago(iso: string | null | undefined): string {
   if (!iso) return "never";
@@ -39,7 +47,7 @@ Deno.serve(async (req) => {
         : `just finished "${e.title ?? "something"}"${e.finished_today > 1 ? ` — that's ${e.finished_today} today` : ""}`;
       const out = await groqJson<{ line: string }>({
         job: "cheer", maxTokens: 60,
-        system: `${FRIEND}\nThey ${what}. Celebrate it in ONE short line (max 9 words), specific to what happened, surprising, never generic ("Great job!" is banned). Return JSON {"line": "..."}.`,
+        system: `${friend(body.persona)}\nThey ${what}. Celebrate it in ONE short line (max 9 words), specific to what happened, surprising, never generic ("Great job!" is banned). Return JSON {"line": "..."}.`,
         user: [clock, e.streak ? `Streak: ${e.streak} days.` : "", said].filter(Boolean).join("\n"),
       });
       return json({ line: String(out.line ?? "").slice(0, 90) });
@@ -88,7 +96,7 @@ Deno.serve(async (req) => {
 
     const out = await groqJson<LineOut>({
       job: "coach", maxTokens: 350,
-      system: `${FRIEND}
+      system: `${friend(body.persona)}
 Pick ONE item to do next (fit it to the moment: short things late at night or when they're easing back in; meatier when they're on a roll) plus up to 2 follow-ups, and write "line": what you'd text them right now.
 The line reacts to the real situation — time of day, a streak alive or at risk, a comeback after days away, goal already met (then zero pressure), something just finished, saving lots but finishing little (tease gently), an empty list, the weekend. Mention the pick by its topic, not its full title, when it fits.
 Length: usually one short sentence (<=12 words). Two short sentences only when something real happened (comeback, milestone, big day). Never more.

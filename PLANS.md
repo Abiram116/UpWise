@@ -119,6 +119,20 @@ Living backlog of things to build next. Nothing here is built yet — this is th
 - [x] **New icon.** Minimal owl — two eyes glancing up-right, apricot beak, on sage.
 - Next: Gemini Nano (ML Kit GenAI Prompt API) for instant offline cheer/Today lines once it can be tested on the device.
 
+### v1.1.0 — companion pass 2
+
+- [x] **Save anything, not just study material.** Reels/videos can be kept as a *reference* (one tap: "Just a reference, not to study") and live in Saved; typed text becomes a **note** (check it off when done) or a **topic to research** (goes to To learn; Start searches for it). Created on-device, no AI, works offline. Shared plain text from any app becomes a note.
+- [x] **Automatic streak freeze.** Every 4th active day in a row banks 2 freeze days (4→2, 8→4; nothing in between). A missed day spends one; with none left the streak resets. Replayed from history so it's always consistent; tap the streak for the shield bank, progress to the next +2, and a 7-day strip. Earning shields is celebrated.
+- [x] **Take a break fixed.** Ending a break used to erase its days from the streak's protection and only the last break was remembered; now both are kept (`break_log`).
+- [x] **Celebrations stay until you tap**, queue instead of racing, and have milestone trophies (#1, #10, #25 …), a graduation-cap owl and a shield card.
+- [x] **Owl as a character.** Eyes follow your finger, tap reactions (wink/hoot/puff/spin), five taps → dizzy, stroke → purrs, hold → personality picker. Five personalities (Classic, Scholar, Chill, Hype, Sassy) with accessories, movement and an AI voice to match.
+- [x] **Motion-graphics launch animation** (owl assembles, eyes dart, beak pops with sparks, wordmark blurs in).
+- [x] **No more surprise headline.** Today's line paints instantly from a local copy; fresh lines are fetched quietly and wait behind a dot on the owl.
+- [x] **Start always opens the link** (it used to wait on the network for the timer first); timer is optimistic; every write has a 12 s timeout and queues instead of hanging.
+- [x] **Notifications:** 4-day horizon, generic copy beyond tomorrow, a "Coming up" preview in Settings.
+- [x] **Android:** long-press launcher shortcuts (Scroll, New note, Save a link, Today); a live study-session notification with a ticking timer and a Done button.
+- [x] **Scroll tab** defaults to everything (it was Quick, which looked sparse), shows counts, and has a Saved view.
+
 ### v1.0.0 — first release
 
 Everything below shipped together as 1.0.0. Found and fixed by testing the live functions end to end before release: the fast "cheer" model doesn't exist on this Groq account (the router now falls through to the next candidate on any 404/403/429/5xx/timeout/bad JSON and remembers dead models); reasoning models returned nothing from a tiny token budget; the Scroll feed's top bar collided with the Windows title-bar buttons; a first-ever launch announced a stale streak milestone; the coach didn't retry when the connection came back.

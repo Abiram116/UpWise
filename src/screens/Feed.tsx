@@ -1,15 +1,16 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router";
 import { motion } from "motion/react";
-import { Check, ChevronUp, Play, SkipForward, Zap } from "lucide-react";
+import { BookOpen, Check, ChevronUp, ExternalLink, Play, SkipForward, Zap } from "lucide-react";
 import { logManualMinutes, useActivity, useItems, useProfile, useSetStatus } from "../lib/api";
 import { owlMoodFor, type CoachCtx } from "../lib/coach";
 import { describeError } from "../lib/errors";
 import { haptic } from "../lib/haptics";
 import { openExternal } from "../lib/links";
+import { startItem } from "../lib/startItem";
 import { getPref, setPref } from "../lib/store";
 import { breakDaySet, isOnBreak, streak, todayMinutes } from "../lib/stats";
-import { FORMAT_LABEL, fmtMinutes, formatOf, isoDay } from "../lib/utils";
+import { FORMAT_LABEL, fmtMinutes, formatOf, isoDay, itemLink } from "../lib/utils";
 import type { Item } from "../lib/types";
 import { Owl } from "../components/BrandMark";
 import { celebrateDone } from "../components/Celebrate";
@@ -32,12 +33,12 @@ export function feedOrder(items: Item[]): Item[] {
     bucket(a) - bucket(b) || (b.relevance_score ?? 3) - (a.relevance_score ?? 3) || b.created_at.localeCompare(a.created_at));
 }
 
-type Mode = "quick" | "all";
+type Mode = "all" | "quick" | "saved";
 
 export function FeedScreen() {
   const items = useItems();
   const profile = useProfile();
-  const activity = useActivity(14);
+  const activity = useActivity(400);
   const nav = useNavigate();
   const toast = useToast();
   const setStatus = useSetStatus();
@@ -46,17 +47,20 @@ export function FeedScreen() {
   const raf = useRef(0);
   const activeRef = useRef(0);
   const [active, setActive] = useState(0);
-  const [mode, setMode] = useState<Mode>("quick");
+  const [mode, setMode] = useState<Mode>("all");
   const [asking, setAsking] = useState<Item | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [hinted, setHinted] = useState(true);
 
-  useEffect(() => { void getPref<Mode>("feedMode", "quick").then(setMode); void getPref("feedHintSeen", false).then((v) => setHinted(v)); }, []);
+  useEffect(() => { void getPref<Mode>("feedMode", "all").then(setMode); void getPref("feedHintSeen", false).then((v) => setHinted(v)); }, []);
 
   const all = useMemo(() => feedOrder(items.data ?? []), [items.data]);
   const quick = useMemo(() => all.filter(isQuick), [all]);
+  // Things you saved to refer back to (reels, links, videos) — scrollable too, never in the study list.
+  const saved = useMemo(() => (items.data ?? []).filter((i) => i.status === "saved" && formatOf(i) !== "note").sort((a, b) => b.created_at.localeCompare(a.created_at)), [items.data]);
   const noQuick = mode === "quick" && quick.length === 0 && all.length > 0;
-  const list = mode === "quick" && !noQuick ? quick : all;
+  const list = mode === "saved" ? saved : mode === "quick" && !noQuick ? quick : all;
+  const counts: Record<Mode, number> = { all: all.length, quick: quick.length, saved: saved.length };
 
   const ctx: CoachCtx | undefined = useMemo(() => {
     if (!items.data || !activity.data) return undefined;
@@ -85,9 +89,7 @@ export function FeedScreen() {
   const next = () => { const el = scroller.current; el?.scrollBy({ top: el.clientHeight, behavior: "smooth" }); };
   const fail = (what: string) => (e: unknown) => toast(`${what} — ${describeError(e).message}`);
 
-  const begin = async (it: Item) => {
-    try { await start(it); void openExternal(it.url); } catch (e) { fail("Couldn't start")(e); }
-  };
+  const begin = (it: Item) => startItem(it, start, toast);
   // Move on first, apply a beat later: the scroll stays smooth and the card you just left
   // leaves the list while you're already looking at the next one.
   const learned = async (it: Item, minutes: number) => {
@@ -119,9 +121,9 @@ export function FeedScreen() {
         <div className="row" style={{ gap: 10 }}>
           <Owl size={36} alive mood={owlMoodFor(ctx, { onBreak: isOnBreak(profile.data?.settings) })} />
           <div className="feed-seg" role="tablist" aria-label="What to scroll">
-            {(["quick", "all"] as const).map((m) => (
+            {(["all", "quick", "saved"] as const).map((m) => (
               <button key={m} role="tab" aria-selected={mode === m} data-active={mode === m} onClick={() => { haptic.select(); pickMode(m); }}>
-                {m === "quick" && <Zap size={13} strokeWidth={2.6} />}{m === "quick" ? "Quick" : "All"}
+                {m === "quick" && <Zap size={13} strokeWidth={2.6} />}{m === "all" ? "To learn" : m === "quick" ? "Quick" : "Saved"}<span className="feed-seg-n num">{counts[m]}</span>
               </button>
             ))}
           </div>
@@ -133,13 +135,14 @@ export function FeedScreen() {
         {noQuick && <p className="feed-note">Nothing quick right now — showing everything.</p>}
         {list.map((it, i) => (
           <FeedCard key={it.id} item={it} near={Math.abs(i - active) <= 1} busy={busy === it.id} hint={i === 0 && !hinted && list.length > 1}
+            reference={it.status === "saved"} onLearn={() => { haptic.success(); setStatus(it.id, "inbox").then(() => toast("Moved to To learn"), fail("Couldn't move it")); }}
             onOpen={() => nav(`/item/${it.id}`)} onStart={() => begin(it)} onLearned={() => onLearned(it)} onSkip={() => skip(it)} />
         ))}
         <section className="feed-card feed-end">
           <motion.div initial={{ scale: 0.7, opacity: 0 }} whileInView={{ scale: 1, opacity: 1 }} transition={spring}>
             <Owl size={110} alive mood={list.length ? "idle" : "happy"} />
           </motion.div>
-          <h2 className="headline">{list.length ? "That's everything for now." : "All caught up."}</h2>
+          <h2 className="headline">{list.length ? "That's everything for now." : mode === "saved" ? "Nothing saved yet." : "All caught up."}</h2>
           <p className="body" style={{ color: "var(--on-surface-2)", maxWidth: 300 }}>
             {list.length ? "Save a few more and they'll be waiting here." : "Nothing left to learn. Share something new from YouTube or Instagram."}
           </p>
@@ -152,8 +155,8 @@ export function FeedScreen() {
   );
 }
 
-function FeedCard({ item, near, busy, hint, onOpen, onStart, onLearned, onSkip }: {
-  item: Item; near: boolean; busy: boolean; hint: boolean; onOpen: () => void; onStart: () => void; onLearned: () => void; onSkip: () => void;
+function FeedCard({ item, near, busy, hint, reference, onLearn, onOpen, onStart, onLearned, onSkip }: {
+  item: Item; near: boolean; busy: boolean; hint: boolean; reference: boolean; onLearn: () => void; onOpen: () => void; onStart: () => void; onLearned: () => void; onSkip: () => void;
 }) {
   const format = formatOf(item);
   const tall = format === "short" || format === "reel";
@@ -175,16 +178,25 @@ function FeedCard({ item, near, busy, hint, onOpen, onStart, onLearned, onSkip }
       <div className="feed-info">
         <p className="feed-meta">
           <span className="row" style={{ gap: 5 }}><FormatIcon item={item} size={14} />{FORMAT_LABEL[format]}</span>
-          {format !== "link" && <span>~{fmtMinutes(est(item))}</span>}
+          {!reference && format !== "link" && <span>~{fmtMinutes(est(item))}</span>}
           {item.category?.name && <span>{item.category.name}</span>}
           {item.status === "in_progress" && <span className="feed-tag">In progress</span>}
         </p>
         <h2 className="feed-title clamp-3">{item.title ?? item.url}</h2>
         {item.ai?.summary && <p className="feed-gist clamp-2">{item.ai.summary}</p>}
         <div className="row" style={{ gap: 10, marginTop: 8 }}>
-          <Pill variant="filled" size="lg" className="grow" onClick={onStart}><Play size={18} fill="currentColor" /> Start</Pill>
-          <Pill variant="tonal" size="lg" icon aria-label="Learned it" onClick={onLearned} disabled={busy}><Check size={22} strokeWidth={2.6} /></Pill>
-          <Pill variant="tonal" size="lg" icon aria-label="Skip" onClick={onSkip} disabled={busy}><SkipForward size={20} /></Pill>
+          {reference ? (
+            <>
+              <Pill variant="filled" size="lg" className="grow" onClick={() => void openExternal(itemLink(item))}><ExternalLink size={18} /> Open</Pill>
+              <Pill variant="tonal" size="lg" icon aria-label="Move to To learn" onClick={onLearn}><BookOpen size={20} /></Pill>
+            </>
+          ) : (
+            <>
+              <Pill variant="filled" size="lg" className="grow" onClick={onStart}><Play size={18} fill="currentColor" /> {format === "topic" ? "Research" : "Start"}</Pill>
+              <Pill variant="tonal" size="lg" icon aria-label="Learned it" onClick={onLearned} disabled={busy}><Check size={22} strokeWidth={2.6} /></Pill>
+              <Pill variant="tonal" size="lg" icon aria-label="Skip" onClick={onSkip} disabled={busy}><SkipForward size={20} /></Pill>
+            </>
+          )}
         </div>
       </div>
     </section>

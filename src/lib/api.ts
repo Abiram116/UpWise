@@ -3,6 +3,7 @@ import { currentUserId, supabase } from "./supabase";
 import { queryClient } from "./queryClient";
 import { analyzeLink, lean } from "./analyze";
 import { writeOrQueue } from "./outbox";
+import { owlPersona } from "../components/BrandMark";
 import { describeError } from "./errors";
 import { useToast } from "../components/ui";
 import type { Category, CoachResult, DailyActivity, Item, ItemStatus, LearningSession, Profile } from "./types";
@@ -222,8 +223,27 @@ export function invalidateProgress() {
 
 // Session rows get client-side ids so a session started offline can be ended offline too —
 // the insert and the update just queue up in order.
-export async function startSession(itemId: string): Promise<LearningSession> {
-  const s: LearningSession = { id: newId(), item_id: itemId, started_at: new Date().toISOString(), ended_at: null, seconds: 0 };
+/** A note or a topic to research: created right here, no AI, so it works offline too. */
+export async function saveNote(text: string, kind: "note" | "topic"): Promise<Item> {
+  const body = text.trim();
+  const id = newId();
+  const now = new Date().toISOString();
+  const row = {
+    id, user_id: currentUserId(), url: `note:${id}`, canonical_url: `note:${id}`, source: "other", title: body.split("\n")[0].slice(0, 140),
+    status: kind === "note" ? "saved" : "inbox", ai: { format: kind }, notes: body, added_via: "paste", tags: [] as string[],
+  };
+  const item = {
+    ...row, external_id: null, description: null, channel: null, thumbnail_url: null, duration_seconds: null, has_transcript: false, transcript: null,
+    category_id: null, category: null, relevance_score: null, estimated_minutes: null, created_at: now, updated_at: now, started_at: null, completed_at: null,
+  } as unknown as Item;
+  queryClient.setQueryData<Item[]>(["items"], (old) => [item, ...(old ?? [])]);
+  try { await writeOrQueue({ kind: "insert", table: "items", row }); }
+  catch (e) { queryClient.setQueryData<Item[]>(["items"], (old) => old?.filter((i) => i.id !== id)); throw e; }
+  return item;
+}
+
+export async function startSession(itemId: string, id = newId(), startedAt = new Date().toISOString()): Promise<LearningSession> {
+  const s: LearningSession = { id, item_id: itemId, started_at: startedAt, ended_at: null, seconds: 0 };
   await writeOrQueue({ kind: "insert", table: "learning_sessions", row: { ...s, user_id: currentUserId() } });
   return s;
 }
@@ -251,26 +271,26 @@ export async function setItemStatus(itemId: string, status: ItemStatus): Promise
 }
 
 // ---------- coach ----------
-export async function fetchCoach(ctx: { previousPickId?: string | null; todayMinutes?: number; streak?: number; event?: string; recentLines?: string[] } = {}): Promise<CoachResult> {
+export async function fetchCoach(ctx: { previousPickId?: string | null; todayMinutes?: number; streak?: number; event?: string; recentLines?: string[]; persona?: string } = {}): Promise<CoachResult> {
   const now = new Date();
   const res = await supabase.functions.invoke("coach", {
     body: {
       local_hour: now.getHours(), weekday: now.toLocaleDateString("en", { weekday: "long" }),
       previous_pick_id: ctx.previousPickId ?? null, today_minutes: ctx.todayMinutes ?? null, streak: ctx.streak ?? null,
-      event: ctx.event ?? null, recent_lines: ctx.recentLines ?? [],
+      event: ctx.event ?? null, recent_lines: ctx.recentLines ?? [], persona: ctx.persona ?? null,
     },
   });
   if (res.error) throw res.error;
   return { ...(res.data as CoachResult), fetched_at: Date.now() };
 }
 
-export interface CheerEvent { kind: "done" | "goal" | "streak" | "cleared"; title?: string; minutes?: number; streak?: number; finished_today?: number; /** A light pop (confetti + haptic) with no card — for rapid learning in the feed. */ quiet?: boolean }
+export interface CheerEvent { kind: "done" | "goal" | "streak" | "cleared" | "shield"; title?: string; minutes?: number; streak?: number; finished_today?: number; /** Items learned in total, for milestone cards. */ total?: number; /** A light pop (confetti + haptic) with no card — for rapid learning in the feed. */ quiet?: boolean }
 
 /** One fresh celebration line — only if it arrives while the celebration is still on screen. */
 export async function fetchCheer(event: CheerEvent, recentLines: string[], timeoutMs = 2700): Promise<string | null> {
   const now = new Date();
   const call = supabase.functions.invoke("coach", {
-    body: { mode: "cheer", event, recent_lines: recentLines, local_hour: now.getHours(), weekday: now.toLocaleDateString("en", { weekday: "long" }) },
+    body: { mode: "cheer", event, recent_lines: recentLines, persona: owlPersona.get(), local_hour: now.getHours(), weekday: now.toLocaleDateString("en", { weekday: "long" }) },
   }).then((r) => (r.error ? null : ((r.data as { line?: string })?.line || null))).catch(() => null);
   return Promise.race([call, new Promise<null>((r) => setTimeout(() => r(null), timeoutMs))]);
 }

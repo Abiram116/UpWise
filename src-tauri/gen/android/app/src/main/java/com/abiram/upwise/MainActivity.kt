@@ -1,6 +1,9 @@
 package com.abiram.upwise
 
 import android.app.DownloadManager
+import android.app.NotificationChannel
+import android.app.NotificationManager
+import android.app.PendingIntent
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
@@ -21,6 +24,7 @@ import android.view.HapticFeedbackConstants
 import android.webkit.JavascriptInterface
 import android.webkit.WebView
 import androidx.activity.OnBackPressedCallback
+import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import androidx.activity.enableEdgeToEdge
 import androidx.core.view.ViewCompat
@@ -28,10 +32,13 @@ import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
 import org.json.JSONObject
 
+private const val SESSION_NOTIFICATION_ID = 4242
+
 class MainActivity : TauriActivity() {
   private var webView: WebView? = null
   private var pendingShare: String? = null
   private var pendingNotification: String? = null
+  private var pendingGo: String? = null
   private var pendingDownloadId: Long = -1
   private val handler = Handler(Looper.getMainLooper())
 
@@ -57,6 +64,7 @@ class MainActivity : TauriActivity() {
     super.onCreate(savedInstanceState)
     handleShare(intent)
     handleNotificationTap(intent)
+    handleShortcut(intent)
     val filter = IntentFilter(DownloadManager.ACTION_DOWNLOAD_COMPLETE)
     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
       registerReceiver(downloadReceiver, filter, Context.RECEIVER_NOT_EXPORTED)
@@ -108,6 +116,7 @@ class MainActivity : TauriActivity() {
     setIntent(intent)
     handleShare(intent)
     handleNotificationTap(intent)
+    handleShortcut(intent)
   }
 
   override fun onWebViewCreate(webView: WebView) {
@@ -119,6 +128,7 @@ class MainActivity : TauriActivity() {
     webView.addJavascriptInterface(NativeBridge(), "AndroidNative")
     pendingShare?.let { deliver(it) }
     pendingNotification?.let { deliverNotification(it) }
+    pendingGo?.let { deliverGo(it) }
   }
 
   private inner class NativeBridge {
@@ -129,6 +139,44 @@ class MainActivity : TauriActivity() {
         c.isAppearanceLightStatusBars = light
         c.isAppearanceLightNavigationBars = light
       }
+    }
+
+    // While you study: an ongoing notification with a live timer (the system's own chronometer,
+    // so it ticks without the app running) and a "Done" button. Tapping Done comes back through
+    // handleNotificationTap as the "session-done" action.
+    @JavascriptInterface
+    fun sessionStart(title: String, startedAtMs: Long, itemId: String) {
+      handler.post {
+        try {
+          if (!NotificationManagerCompat.from(this@MainActivity).areNotificationsEnabled()) return@post
+          val nm = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+          if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            nm.createNotificationChannel(NotificationChannel("upwise-session", "Study session", NotificationManager.IMPORTANCE_LOW).apply {
+              description = "A live timer while you're studying"; setShowBadge(false)
+            })
+          }
+          val flags = PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+          val open = PendingIntent.getActivity(this@MainActivity, 1, Intent(this@MainActivity, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP), flags)
+          val doneIntent = Intent(this@MainActivity, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP)
+            .putExtra("NotificationUserAction", "session-done").putExtra("NotificationId", SESSION_NOTIFICATION_ID)
+            .putExtra("LocalNotficationObject", JSONObject().put("extra", JSONObject().put("itemId", itemId)).toString())
+          val done = PendingIntent.getActivity(this@MainActivity, 2, doneIntent, flags)
+          val n = NotificationCompat.Builder(this@MainActivity, "upwise-session")
+            .setSmallIcon(R.drawable.ic_stat_upwise).setColor(0xFF2F6A52.toInt())
+            .setContentTitle("Studying").setContentText(title)
+            .setUsesChronometer(true).setWhen(startedAtMs).setShowWhen(true)
+            .setOngoing(true).setOnlyAlertOnce(true).setCategory(NotificationCompat.CATEGORY_PROGRESS)
+            .setContentIntent(open).addAction(0, "Done", done).build()
+          nm.notify(SESSION_NOTIFICATION_ID, n)
+        } catch (e: Exception) {
+          Log.e("UpWise", "sessionStart failed", e)
+        }
+      }
+    }
+
+    @JavascriptInterface
+    fun sessionStop() {
+      handler.post { try { NotificationManagerCompat.from(this@MainActivity).cancel(SESSION_NOTIFICATION_ID) } catch (e: Exception) { /* nothing to cancel */ } }
     }
 
     // A notification's "Later"/"Skip" button has to open the app to be delivered at all; once
@@ -284,6 +332,28 @@ class MainActivity : TauriActivity() {
       handler.postDelayed({ webView?.evaluateJavascript(js, null) }, delay)
     }
     pendingNotification = null
+  }
+
+  // Launcher shortcuts (long-press the icon) arrive as upwise://feed | note | link | today.
+  private fun handleShortcut(intent: Intent?) {
+    val uri = intent?.data ?: return
+    if (uri.scheme != "upwise") return
+    val target = uri.host ?: return
+    intent.data = null // consumed: don't replay on a config change
+    pendingGo = target
+    if (webView != null) deliverGo(target)
+  }
+
+  private fun deliverGo(target: String) {
+    val token = System.nanoTime().toString()
+    val js = "(function(){try{" +
+      "if(window.__upwiseGo){window.__upwiseGo('$target','$token');}else{window.__upwisePendingGo={t:'$target',k:'$token'};}" +
+      "}catch(e){}})();"
+    // The page may still be booting on a cold start, so ask a few times; the page acts on each token once.
+    for (delay in longArrayOf(0, 700, 1800, 3500)) {
+      handler.postDelayed({ webView?.evaluateJavascript(js, null) }, delay)
+    }
+    pendingGo = null
   }
 
   private fun handleShare(intent: Intent?) {

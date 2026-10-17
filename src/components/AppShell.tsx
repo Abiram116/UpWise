@@ -7,6 +7,7 @@ import { SessionBar } from "./SessionBar";
 import { ConnectionBanner } from "./ConnectionBanner";
 import { Owl } from "./BrandMark";
 import { useBackHandler } from "../lib/backHandler";
+import "../lib/android-bridge";
 import { onShare } from "../lib/share";
 import { extractUrl } from "../lib/utils";
 import { Spinner, spring } from "./ui";
@@ -41,6 +42,22 @@ export function AppShell() {
   const loc = useLocation();
   const nav = useNavigate();
   const [addOpen, setAddOpen] = useState(false);
+
+  // Launcher shortcuts (long-press the icon): jump straight to the Scroll feed, Today, or the
+  // save sheet. Each request carries a token so the native side's retries only act once.
+  useEffect(() => {
+    const seen = new Set<string>();
+    const go = (target: string, token?: string) => {
+      if (token) { if (seen.has(token)) return; seen.add(token); }
+      if (target === "feed") nav("/feed");
+      else if (target === "today") nav("/");
+      else if (target === "note" || target === "link") { nav("/"); setAddOpen(true); }
+    };
+    window.__upwiseGo = go;
+    const pending = window.__upwisePendingGo;
+    if (pending) { window.__upwisePendingGo = undefined; go(pending.t, pending.k); }
+    return () => { if (window.__upwiseGo === go) window.__upwiseGo = undefined; };
+  }, [nav]);
 
   // Android back, after any open sheet has had its turn: a detail screen goes back to where
   // it was opened from (or Today on a cold start from a notification), another tab goes to

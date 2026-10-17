@@ -1,8 +1,9 @@
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { useNavigate } from "react-router";
 import { AnimatePresence, motion } from "motion/react";
-import { AlertCircle, ArrowRight, CloudOff, Play } from "lucide-react";
-import { useAnalyze, useCategories, useSetStatus, useUpdateItem, type AnalyzeStage } from "../lib/api";
+import { AlertCircle, ArrowRight, Bookmark, CloudOff, Play } from "lucide-react";
+import { saveNote, useAnalyze, useCategories, useSetStatus, useUpdateItem, type AnalyzeStage } from "../lib/api";
+import { haptic } from "../lib/haptics";
 import { extractUrl, fmtMinutes, detectSource, FORMAT_LABEL, formatOf } from "../lib/utils";
 import { FormatIcon } from "./ItemCard";
 
@@ -41,6 +42,9 @@ const STAGES: { key: AnalyzeStage; label: string }[] = [
 export function AddSheet({ open, onClose }: { open: boolean; onClose: () => void }) {
   const [url, setUrl] = useState("");
   const [note, setNote] = useState("");
+  // Typed text (no link) is a note or a topic to research — saved on the spot, no AI.
+  const [textKind, setTextKind] = useState<"note" | "topic">("note");
+  const [savingText, setSavingText] = useState(false);
   const [stage, setStage] = useState<AnalyzeStage | null>(null);
   const [result, setResult] = useState<{ item: Item; duplicate: boolean; ai_error: string | null } | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -99,7 +103,11 @@ export function AddSheet({ open, onClose }: { open: boolean; onClose: () => void
     if (!open) return;
     if (q) {
       const item = queueStore.take();
-      if (item) { setUrl(item.url); void run(item.url, item.via); }
+      if (item) {
+        setUrl(item.url);
+        // Shared plain text has no link to analyse: leave it in the box to be saved as a note.
+        if (extractUrl(item.url)) void run(item.url, item.via);
+      }
     } else {
       setTimeout(() => inputRef.current?.focus(), 300);
     }
@@ -107,7 +115,20 @@ export function AddSheet({ open, onClose }: { open: boolean; onClose: () => void
   }, [open, q?.nonce]);
 
   const busy = stage !== null;
-  const source = url ? detectSource(url) : null;
+  const hasUrl = !!extractUrl(url);
+  const isText = url.trim().length > 0 && !hasUrl;
+  const source = hasUrl ? detectSource(url) : null;
+
+  const saveText = async () => {
+    setSavingText(true);
+    try {
+      await saveNote(url, textKind);
+      haptic.success();
+      toast(textKind === "note" ? "Note saved" : "Topic saved — it's in To learn");
+      close();
+    } catch (e) { setError(describeError(e).message); }
+    finally { setSavingText(false); }
+  };
 
   const reset = () => { setUrl(""); setNote(""); setResult(null); setError(null); setQueuedOffline(false); setStage(null); };
   const close = () => {
@@ -117,7 +138,7 @@ export function AddSheet({ open, onClose }: { open: boolean; onClose: () => void
   };
 
   return (
-    <Sheet open={open} onClose={close} title={result || queuedOffline ? undefined : busy ? "Reading it" : "Add a link"}>
+    <Sheet open={open} onClose={close} title={result || queuedOffline ? undefined : busy ? "Reading it" : "Save something"}>
       <AnimatePresence mode="wait" initial={false}>
         {queuedOffline && (
           <motion.div key="queued" className="col" style={{ gap: 14, alignItems: "center", textAlign: "center", padding: "8px 0" }}
@@ -134,13 +155,24 @@ export function AddSheet({ open, onClose }: { open: boolean; onClose: () => void
         )}
         {!busy && !result && !queuedOffline && (
           <motion.form key="form" className="col" style={{ gap: 12 }} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.15 }}
-            onSubmit={(e) => { e.preventDefault(); const u = extractUrl(url); if (u) void run(u); }}>
-            <input ref={inputRef} className="input input-lg" placeholder="YouTube, Instagram or article link" value={url}
-              onChange={(e) => setUrl(e.target.value)} inputMode="url" autoCapitalize="off" autoCorrect="off" spellCheck={false} enterKeyHint="go" />
-            {source && url && <p className="meta" style={{ paddingLeft: 20 }}>{previewLabel(url, source)}</p>}
-            <input className="input" placeholder="Note (optional)" value={note} onChange={(e) => setNote(e.target.value)} />
+            onSubmit={(e) => { e.preventDefault(); const u = extractUrl(url); if (u) void run(u); else if (isText) void saveText(); }}>
+            <input ref={inputRef} className="input input-lg" placeholder="Paste a link, or type a note or topic" value={url}
+              onChange={(e) => { setUrl(e.target.value); setError(null); }} autoCapitalize="sentences" autoCorrect="on" enterKeyHint="go" />
+            {hasUrl && source && <p className="meta" style={{ paddingLeft: 20 }}>{previewLabel(url, source)}</p>}
+            {isText && (
+              <div className="col" style={{ gap: 8, paddingLeft: 4 }}>
+                <div className="chips">
+                  <Chip active={textKind === "note"} onClick={() => setTextKind("note")}>Note / reminder</Chip>
+                  <Chip active={textKind === "topic"} onClick={() => setTextKind("topic")}>Topic to research</Chip>
+                </div>
+                <p className="meta" style={{ paddingLeft: 16 }}>{textKind === "note" ? "Kept in Saved — check it off when it's done." : "Goes into To learn. Start it and UpWise searches for you."}</p>
+              </div>
+            )}
+            {hasUrl && <input className="input" placeholder="Note (optional)" value={note} onChange={(e) => setNote(e.target.value)} />}
             {error && <p className="meta row" style={{ color: "var(--error)", gap: 6, paddingLeft: 20 }}><AlertCircle size={14} /> {error}</p>}
-            <Pill variant="filled" size="lg" type="submit" disabled={!extractUrl(url)} style={{ marginTop: 8 }}>Analyze and save</Pill>
+            <Pill variant="filled" size="lg" type="submit" loading={savingText} disabled={!hasUrl && !isText} style={{ marginTop: 8 }}>
+              {hasUrl ? "Analyze and save" : isText ? (textKind === "note" ? "Save note" : "Save topic") : "Analyze and save"}
+            </Pill>
           </motion.form>
         )}
 
@@ -252,6 +284,10 @@ function ResultCard({ result, onDone }: { result: { item: Item; duplicate: boole
         <Pill variant="filled" size="lg" className="grow" onClick={async () => { await start(item); onDone(); nav(`/item/${item.id}`); toast("Session started"); }}><Play size={17} fill="currentColor" /> Start now</Pill>
         <Pill variant="text" size="lg" onClick={() => { onDone(); nav(`/item/${item.id}`); }}>Details <ArrowRight size={16} /></Pill>
       </div>
+      <Pill variant="text" size="sm" style={{ alignSelf: "flex-start", marginLeft: -14 }}
+        onClick={async () => { try { await setStatus(item.id, "saved"); toast("Kept as a reference — it's in Saved"); onDone(); } catch { toast("Couldn't change that — try from the item page"); } }}>
+        <Bookmark size={16} /> Just a reference, not to study
+      </Pill>
     </motion.div>
   );
 }

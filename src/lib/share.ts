@@ -13,7 +13,8 @@ type Handler = (url: string, raw: string) => void;
 let handler: Handler | null = null;
 
 function deliver(raw: string) {
-  const url = extractUrl(raw);
+  // A shared link is saved and analysed; shared plain text becomes a note.
+  const url = extractUrl(raw) ?? raw.trim();
   if (!url) return;
   if (handler) handler(url, raw);
   else window.__upwisePendingShare = raw;

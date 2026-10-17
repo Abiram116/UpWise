@@ -81,7 +81,7 @@ export interface PlanInput {
   opens?: number[];
 }
 
-interface Planned { id: number; at: Date; title: string; body: string; itemId: string | null; actions?: string; kind: string }
+export interface Planned { id: number; at: Date; title: string; body: string; itemId: string | null; actions?: string; kind: string }
 
 const DAY = 86400e3;
 const STALE_AFTER_DAYS = 10;
@@ -119,14 +119,21 @@ function planFor(input: PlanInput, now: Date): Planned[] {
   const byId = new Map(items.map((i) => [i.id, i]));
   const shortest = [...pending].sort((a, b) => est(a) - est(b))[0];
 
-  for (let d = 0; d < 2; d++) {
+  // Four days ahead, so a few days away from the app doesn't leave you with no nudges at all.
+  // Beyond tomorrow the copy is generic (nothing names an item that may be done by then) and
+  // carries no action buttons.
+  for (let d = 0; d < 4; d++) {
+    const far = d >= 2;
     // ---- morning plan ----
     const [mh, mm] = morningTime(sessions);
     const coached = d === 0 && coach?.pick_item_id ? byId.get(coach.pick_item_id) : undefined;
     const first = quiet ? shortest : coached && pending.includes(coached) ? coached : heuristicPick(items)!;
     const then = (d === 0 && coached ? (coach!.next_item_ids ?? []).map((id) => byId.get(id)) : pending.filter((i) => i.id !== first.id).slice(0, 1))
       .filter((i): i is Item => !!i && i.id !== first.id && pending.includes(i)).slice(0, 1);
-    out.push({
+    out.push(far ? {
+      id: 1000 + d, at: at(now, d, mh, mm), itemId: null, kind: "morning_plan",
+      title: quiet ? "Ease back in" : "Today's plan", body: `${pluralize(pending.length, "thing")} saved and waiting — open UpWise and I'll pick one.`,
+    } : {
       id: 1000 + d, at: at(now, d, mh, mm), itemId: first.id, actions: ACTIONS.plan, kind: "morning_plan",
       title: quiet ? "Ease back in" : coached ? coach!.headline : "Today's plan",
       body: quiet
@@ -144,7 +151,7 @@ function planFor(input: PlanInput, now: Date): Planned[] {
     const stale = pending
       .filter((i) => i.status !== "in_progress" && i.id !== first.id && now.getTime() - new Date(i.created_at).getTime() >= STALE_AFTER_DAYS * DAY)
       .sort((a, b) => a.created_at.localeCompare(b.created_at))[d]; // a different one each day
-    if (resumable && d === 0) {
+    if (far) { /* nothing item-specific this far out */ } else if (resumable && d === 0) {
       out.push({
         id: 1100 + d, at: at(now, d, 13, 0), itemId: resumable.id, actions: ACTIONS.resume, kind: "resume",
         title: "Pick up where you left off", body: `${titleOf(resumable)} — you started it and it's still open.`,
@@ -164,7 +171,10 @@ function planFor(input: PlanInput, now: Date): Planned[] {
     const nearMorning = Math.abs(slot.hour * 60 + slot.minute - (mh * 60 + mm)) < 90;
     if (left > 0 && !nearMorning) {
       const fit = [...pending].filter((i) => est(i) <= Math.max(left, 10)).sort((a, b) => est(b) - est(a))[0] ?? shortest;
-      out.push({
+      out.push(far ? {
+        id: 1200 + d, at: at(now, d, slot.hour, slot.minute), itemId: null, kind: "study_slot",
+        title: "Your study slot", body: "A good moment for something small — tap to see what.",
+      } : {
         id: 1200 + d, at: at(now, d, slot.hour, slot.minute), itemId: fit.id, actions: ACTIONS.plan, kind: "study_slot",
         title: st > 1 && d === 0 ? `Keep your ${st}-day streak` : "Your study slot",
         body: `${titleOf(fit)} fits in ~${fmtMinutes(est(fit))}.`,
@@ -172,6 +182,14 @@ function planFor(input: PlanInput, now: Date): Planned[] {
     }
   }
   return out;
+}
+
+/** What's coming, for Settings — the same plan the scheduler uses, soonest first. */
+export function previewPlan(input: PlanInput): Planned[] {
+  const s = settingsOf(input.profile);
+  if (!s.enabled || isOnBreak(input.profile.settings)) return [];
+  const now = new Date();
+  return planFor(input, now).filter((n) => n.at.getTime() > now.getTime() + 60_000).sort((a, b) => a.at.getTime() - b.at.getTime());
 }
 
 const WEEKLY_RECAP_ID = 800;

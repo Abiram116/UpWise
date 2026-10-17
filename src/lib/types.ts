@@ -1,6 +1,6 @@
 export type ItemStatus = "inbox" | "queued" | "in_progress" | "completed" | "skipped" | "saved";
 /** What kind of thing it is. "link" = a site/tool kept as a bookmark, no AI. */
-export type ItemFormat = "video" | "short" | "reel" | "post" | "article" | "link";
+export type ItemFormat = "video" | "short" | "reel" | "post" | "article" | "link" | "note" | "topic";
 export type ItemSource = "youtube" | "instagram" | "article" | "other";
 
 export interface Category {
@@ -70,6 +70,9 @@ export interface Profile {
     break_until?: string | "indefinite" | null; // ISO day (inclusive) or "indefinite", null = not on a break
     break_started?: string | null; // ISO day the current/last break began, for streak neutrality
     break_reason?: string | null;
+    /** Earlier breaks, so their days stay streak-neutral after a newer one begins. */
+    break_log?: { from: string; to: string }[];
+    owl_persona?: "classic" | "scholar" | "chill" | "hype" | "sassy"; // which owl you picked
     weekly_recap?: boolean;
     warn_duplicates?: boolean; // default true — flag likely-duplicate saves at save-time
   };

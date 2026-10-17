@@ -2,10 +2,11 @@ import { useEffect, useState, useSyncExternalStore } from "react";
 import { useNavigate } from "react-router";
 import { AnimatePresence, motion } from "motion/react";
 import { Check, Square } from "lucide-react";
-import { endSession, invalidateProgress, setItemStatus, startSession } from "../lib/api";
+import { endSession, invalidateProgress, newId, setItemStatus, startSession } from "../lib/api";
 import { describeError } from "../lib/errors";
 import { celebrateDone } from "./Celebrate";
 import { getPref, setPref } from "../lib/store";
+import "../lib/android-bridge";
 import type { Item } from "../lib/types";
 import { Pill, spring, useToast } from "./ui";
 
@@ -16,7 +17,7 @@ let hydrated = false;
 const subs = new Set<() => void>();
 const emit = () => subs.forEach((s) => s());
 
-const sessionStore = {
+export const sessionStore = {
   get: () => active,
   subscribe: (l: () => void) => { subs.add(l); return () => { subs.delete(l); }; },
   async hydrate() {
@@ -29,6 +30,7 @@ const sessionStore = {
     if (ageMin > 240) {
       try { await endSession(saved.sessionId, saved.startedAt, Math.round(saved.estimatedMinutes * 1.5 * 60)); } catch { /* ignore */ }
       await setPref("activeSession", null);
+      window.AndroidNative?.sessionStop?.();
       return;
     }
     active = saved; emit();
@@ -36,17 +38,22 @@ const sessionStore = {
   // Both directions go through the outbox (see api.ts), so starting or stopping with no
   // signal just queues — the timer and the logged time are never lost to a failed request.
   async start(item: Item) {
-    if (active) await sessionStore.stop(false);
-    const s = await startSession(item.id);
-    active = { sessionId: s.id, itemId: item.id, title: item.title ?? "Learning", startedAt: s.started_at, estimatedMinutes: item.estimated_minutes ?? 10 };
-    await setPref("activeSession", active); emit();
-    await setItemStatus(item.id, "in_progress");
+    if (active) void sessionStore.stop(false).catch(() => {});
+    // Optimistic: the timer is running the instant you tap. The saves happen behind it (and
+    // queue by themselves if the network is slow or gone).
+    const id = newId(), startedAt = new Date().toISOString();
+    active = { sessionId: id, itemId: item.id, title: item.title ?? "Learning", startedAt, estimatedMinutes: item.estimated_minutes ?? 10 };
+    emit();
+    void setPref("activeSession", active);
+    window.AndroidNative?.sessionStart?.(active.title, Date.parse(startedAt), item.id); // live timer in the notification shade
+    await Promise.all([startSession(item.id, id, startedAt), setItemStatus(item.id, "in_progress")]);
   },
   async stop(complete: boolean) {
     if (!active) return;
     const a = active;
     // End it before clearing it: if the write is rejected outright, the session is still on
     // screen to retry rather than silently gone.
+    window.AndroidNative?.sessionStop?.();
     await endSession(a.sessionId, a.startedAt);
     active = null; emit();
     await setPref("activeSession", null);

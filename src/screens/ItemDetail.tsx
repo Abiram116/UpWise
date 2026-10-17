@@ -1,13 +1,15 @@
 import { useEffect, useMemo, useState } from "react";
 import { useLocation, useNavigate, useParams } from "react-router";
 import { motion } from "motion/react";
-import { ArrowLeft, BookOpen, Bookmark, Check, ChevronRight, Copy, ExternalLink, FileText, Play, RefreshCw, SkipForward, Trash2, Undo2 } from "lucide-react";
+import { ArrowLeft, BookOpen, Bookmark, Check, ChevronRight, Copy, ExternalLink, FileText, Play, RefreshCw, Search, SkipForward, Trash2, Undo2 } from "lucide-react";
 import { logManualMinutes, useAnalyze, useCategories, useDeleteItemWithUndo, useItem, useItemTranscript, useSetStatus, useUpdateItem } from "../lib/api";
 import { isDesktop } from "../lib/platform";
 import { openExternal as open } from "../lib/links";
 import { describeError, isNetworkError } from "../lib/errors";
-import { FORMAT_LABEL, confidence, fmtDuration, fmtMinutes, formatOf, isWatchable, relativeTime } from "../lib/utils";
+import { FORMAT_LABEL, confidence, fmtDuration, fmtMinutes, formatOf, isWatchable, itemLink, relativeTime, youtubeSearch } from "../lib/utils";
+import type { Item } from "../lib/types";
 import { getPref, setPref } from "../lib/store";
+import { startItem } from "../lib/startItem";
 import { useActiveSession, useSessionStore } from "../components/SessionBar";
 import { FormatIcon } from "../components/ItemCard";
 import { celebrateDone } from "../components/Celebrate";
@@ -60,7 +62,18 @@ export function ItemDetailScreen() {
 
   const ai = item.ai ?? {};
   const format = formatOf(item);
-  const isLink = format === "link";
+  if (format === "note") return <NoteView item={item} onBack={back} />;
+  const isTopic = format === "topic";
+  const saved = item.status === "saved";
+  // Saved items (links, reels you only want to refer back to…) get the light layout: open it,
+  // or turn it into something to learn. Notes and topics have their own handling below.
+  const isLink = saved; // notes returned above
+  const link = itemLink(item);
+  const learnIt = async () => {
+    // Already read by the AI → just move it into To learn; a bare link needs its first analysis.
+    if (ai.summary) setStatus(item.id, "inbox").then(() => toast("Added to To learn"), fail("Couldn't move it"));
+    else await reanalyze("learn");
+  };
   const isActive = active?.itemId === item.id;
   const embed = format === "video" && item.external_id && isDesktop();
   const done = item.status === "completed";
@@ -101,7 +114,7 @@ export function ItemDetailScreen() {
         {embed ? (
           <div className="player"><iframe src={`https://www.youtube-nocookie.com/embed/${item.external_id}?rel=0&modestbranding=1`} title={item.title ?? ""} allow="accelerometer; autoplay; clipboard-write; encrypted-media; picture-in-picture" allowFullScreen /></div>
         ) : item.thumbnail_url ? (
-          <motion.button className="thumb thumb-lg" data-format={format} layoutId={`thumb-${item.id}`} transition={spring} onClick={() => open(item.url)} style={{ position: "relative" }} whileTap={{ scale: 0.99 }}>
+          <motion.button className="thumb thumb-lg" data-format={format} layoutId={`thumb-${item.id}`} transition={spring} onClick={() => open(link)} style={{ position: "relative" }} whileTap={{ scale: 0.99 }}>
             <img src={item.thumbnail_url} alt="" />
             {isWatchable(format) && (
               <span style={{ position: "absolute", inset: 0, display: "grid", placeItems: "center" }}>
@@ -120,17 +133,17 @@ export function ItemDetailScreen() {
             {[isLink ? host : item.channel, fmtDuration(item.duration_seconds), !isLink && item.estimated_minutes != null ? `~${fmtMinutes(item.estimated_minutes)} to learn` : null, `saved ${relativeTime(item.created_at)}`]
               .filter(Boolean).map((t) => <span key={t as string}>{t}</span>)}
           </p>
-          {isLink ? (item.description && <p className="body clamp-3" style={{ color: "var(--on-surface-2)" }}>{item.description}</p>)
-            : ai.summary && <p className="body-lg selectable" style={{ color: "var(--on-surface-2)" }}>{ai.summary}</p>}
-          {!isLink && !!ai.key_concepts?.length && <div className="chips">{ai.key_concepts.slice(0, 5).map((k) => <Chip key={k}>{k}</Chip>)}</div>}
+          {ai.summary ? <p className="body-lg selectable" style={{ color: "var(--on-surface-2)" }}>{ai.summary}</p>
+            : isLink && item.description && <p className="body clamp-3" style={{ color: "var(--on-surface-2)" }}>{item.description}</p>}
+          {!!ai.key_concepts?.length && <div className="chips">{ai.key_concepts.slice(0, 5).map((k) => <Chip key={k}>{k}</Chip>)}</div>}
         </div>
       </Rise>
 
       <Rise>
         {isLink ? (
           <div className="row" style={{ gap: 8 }}>
-            <Pill variant="filled" size="lg" className="grow" onClick={() => open(item.url)}><ExternalLink size={17} /> Open</Pill>
-            <Pill variant="tonal" size="lg" loading={reanalyzing} onClick={() => reanalyze("learn")}><BookOpen size={17} /> Learn it</Pill>
+            <Pill variant="filled" size="lg" className="grow" onClick={() => open(link)}><ExternalLink size={17} /> Open</Pill>
+            <Pill variant="tonal" size="lg" loading={reanalyzing} onClick={learnIt}><BookOpen size={17} /> Learn it</Pill>
           </div>
         ) : (
           <div className="col" style={{ gap: 10 }}>
@@ -142,11 +155,15 @@ export function ItemDetailScreen() {
               ) : isActive ? (
                 <Pill variant="filled" size="lg" className="grow" onClick={finish}><Check size={18} strokeWidth={2.5} /> Done learning</Pill>
               ) : (
-                <Pill variant="filled" size="lg" className="grow" onClick={async () => { try { await start(item); if (!embed) void open(item.url); } catch (e) { fail("Couldn't start")(e); } }}>
+                <Pill variant="filled" size="lg" className="grow" onClick={() => startItem(item, start, toast, { open: !embed })}>
                   <Play size={18} fill="currentColor" /> Start
                 </Pill>
               )}
-              <Pill variant="tonal" size="lg" icon aria-label="Open" onClick={() => open(item.url)}><ExternalLink size={18} /></Pill>
+              {isTopic ? (
+                <Pill variant="tonal" size="lg" icon aria-label="Search YouTube" onClick={() => open(youtubeSearch(item.title))}><Search size={18} /></Pill>
+              ) : (
+                <Pill variant="tonal" size="lg" icon aria-label="Open" onClick={() => open(link)}><ExternalLink size={18} /></Pill>
+              )}
             </div>
             <div className="row wrap" style={{ gap: 4, marginLeft: -14 }}>
               {!done && !isActive && <Pill variant="text" size="sm" onClick={finish}><Check size={16} /> Mark done</Pill>}
@@ -202,8 +219,8 @@ export function ItemDetailScreen() {
 
       <Rise>
         <div className="row wrap" style={{ gap: 4, marginLeft: -14, paddingTop: 4 }}>
-          {!isLink && <Pill variant="text" size="sm" loading={reanalyzing} onClick={() => reanalyze()}><RefreshCw size={16} /> Refresh</Pill>}
-          {!isLink && !done && <Pill variant="text" size="sm" onClick={() => reanalyze("link")}><Bookmark size={16} /> Just keep the link</Pill>}
+          {!isLink && !isTopic && <Pill variant="text" size="sm" loading={reanalyzing} onClick={() => reanalyze()}><RefreshCw size={16} /> Refresh</Pill>}
+          {!isLink && !isTopic && !done && <Pill variant="text" size="sm" onClick={() => setStatus(item.id, "saved").then(() => toast("Kept as a reference — it's in Saved"), fail("Couldn't change it"))}><Bookmark size={16} /> Just a reference</Pill>}
           <span className="grow" />
           <Pill variant="text" size="sm" onClick={() => setConfirmDel(true)} style={{ color: "var(--error)" }}><Trash2 size={16} /> Delete</Pill>
         </div>
@@ -291,5 +308,36 @@ function TranscriptSheet({ open, onClose, title, query }: {
         <p className="body">No transcript text was stored for this one.</p>
       ) : <div style={{ display: "grid", placeItems: "center", padding: 24 }}><Spinner /></div>}
     </Sheet>
+  );
+}
+
+/** A plain note / reminder: just the text, editable, and a way to check it off. */
+function NoteView({ item, onBack }: { item: Item; onBack: () => void }) {
+  const update = useUpdateItem();
+  const del = useDeleteItemWithUndo();
+  const nav = useNavigate();
+  const toast = useToast();
+  const [text, setText] = useState(item.notes ?? item.title ?? "");
+  const save = () => {
+    const body = text.trim();
+    if (body && body !== (item.notes ?? "")) update.mutate({ id: item.id, notes: body, title: body.split("\n")[0].slice(0, 140) }, { onError: (e) => toast(`Couldn't save — ${describeError(e).message}`) });
+  };
+  return (
+    <Page>
+      <Rise>
+        <div className="row between">
+          <Pill variant="text" size="sm" onClick={() => { save(); onBack(); }} style={{ marginLeft: -14 }}><ArrowLeft size={18} /> Back</Pill>
+          <span className="meta">Note · saved {relativeTime(item.created_at)}</span>
+        </div>
+      </Rise>
+      <Rise>
+        <textarea className="input note-area" value={text} onChange={(e) => setText(e.target.value)} onBlur={save} placeholder="Write it down" autoFocus={!item.notes} />
+      </Rise>
+      <Rise>
+        <div className="row" style={{ gap: 8 }}>
+          <Pill variant="filled" size="lg" className="grow" onClick={() => { del(item); nav("/library?f=links", { replace: true }); }}><Check size={18} strokeWidth={2.5} /> Done — check it off</Pill>
+        </div>
+      </Rise>
+    </Page>
   );
 }

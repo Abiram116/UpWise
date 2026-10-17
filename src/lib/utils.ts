@@ -122,8 +122,14 @@ export function formatOf(item: Pick<Item, "ai" | "source" | "url" | "duration_se
 }
 
 export const FORMAT_LABEL: Record<ItemFormat, string> = {
-  video: "Video", short: "Short", reel: "Reel", post: "Post", article: "Article", link: "Link",
+  video: "Video", short: "Short", reel: "Reel", post: "Post", article: "Article", link: "Link", note: "Note", topic: "Topic",
 };
+
+/** Where "Open" / "Start" should take you: topics have no link of their own, so they search. */
+export function itemLink(i: Pick<Item, "ai" | "source" | "url" | "duration_seconds" | "status" | "title">): string {
+  return formatOf(i) === "topic" ? `https://www.google.com/search?q=${encodeURIComponent(`${i.title ?? ""} explained`)}` : i.url;
+}
+export const youtubeSearch = (q: string | null) => `https://www.youtube.com/results?search_query=${encodeURIComponent(q ?? "")}`;
 
 /** Anything you watch/listen to (so a transcript and "worth watching" parts can exist). */
 export const isWatchable = (f: ItemFormat) => f === "video" || f === "short" || f === "reel";
