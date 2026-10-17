@@ -21,7 +21,7 @@ initTheme();
 const persister = createAsyncStoragePersister({
   storage: window.localStorage,
   key: "upwise:query-cache",
-  throttleTime: 2000,
+  throttleTime: 5000, // the whole cache is serialised on each write: fewer, batched writes
 });
 
 ReactDOM.createRoot(document.getElementById("root")!).render(

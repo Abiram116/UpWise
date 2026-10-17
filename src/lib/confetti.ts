@@ -74,7 +74,8 @@ export function confetti(pattern: Pattern, power = 1) {
   if (typeof document === "undefined" || window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
   running?.remove();
   const W = window.innerWidth, H = window.innerHeight;
-  const dpr = Math.min(window.devicePixelRatio || 1, 2);
+  // 1.5× is visually identical to 2× for small moving shapes, at ~45% fewer pixels to clear and fill.
+  const dpr = Math.min(window.devicePixelRatio || 1, 1.5);
   const cv = document.createElement("canvas");
   cv.width = W * dpr; cv.height = H * dpr;
   cv.style.cssText = "position:fixed;inset:0;width:100%;height:100%;z-index:75;pointer-events:none";

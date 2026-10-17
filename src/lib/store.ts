@@ -2,7 +2,8 @@ import { LazyStore } from "@tauri-apps/plugin-store";
 import { isTauri } from "./platform";
 
 // Small device-local preferences (theme, active session, cached coach). Not synced.
-const store = isTauri ? new LazyStore("prefs.json") : null;
+// autoSave batches writes (300 ms) instead of flushing to disk after every single set.
+const store = isTauri ? new LazyStore("prefs.json", { autoSave: 300, defaults: {} }) : null;
 
 export async function getPref<T>(key: string, fallback: T): Promise<T> {
   try {
@@ -21,7 +22,6 @@ export async function setPref<T>(key: string, value: T): Promise<void> {
   try {
     if (store) {
       await store.set(key, value);
-      await store.save();
     } else localStorage.setItem(`upwise:${key}`, JSON.stringify(value));
   } catch { /* ignore */ }
 }

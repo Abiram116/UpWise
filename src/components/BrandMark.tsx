@@ -1,6 +1,7 @@
 import { useEffect, useId, useRef, useState, useSyncExternalStore } from "react";
 import { AnimatePresence, animate, motion, useAnimationControls, useMotionValue, useReducedMotion, useSpring } from "motion/react";
 import { haptic } from "../lib/haptics";
+import { subscribePointer } from "../lib/pointerHub";
 
 // The UpWise owl. Same geometry as the launcher icon (1024 box — keep in sync with the icon
 // generator) in fixed brand colours (a wallpaper palette would wash a mascot out).
@@ -8,13 +9,13 @@ import { haptic } from "../lib/haptics";
 // It's a character, not a logo:
 //   • alive      wanders its gaze, blinks at random, bobs, twitches an ear
 //   • follows    (interactive) its eyes track your finger / cursor
-//   • reacts     tap → wink / hoot / puff / spin; 5 quick taps → dizzy; stroke it → purrs
+//   • reacts     tap → wink / hoot / puff / spin / nod / tilt; 5 quick taps → dizzy; stroke it → purrs
 //   • moods      idle · happy · think · sleepy · waiting · excited · love · dizzy
 //   • persona    classic · scholar (glasses) · chill (headphones) · hype (headband) · sassy (brow),
 //                each with its own accessories, movement and speech
 export type OwlMood = "idle" | "happy" | "think" | "sleepy" | "waiting" | "excited" | "love" | "dizzy";
 export type OwlPersona = "classic" | "scholar" | "chill" | "hype" | "sassy";
-type Reaction = "wink" | "hoot" | "puff" | "spin" | "love" | "dizzy" | "yawn";
+type Reaction = "wink" | "hoot" | "puff" | "spin" | "nod" | "tilt" | "love" | "dizzy" | "yawn";
 
 export const PERSONAS: { id: OwlPersona; name: string; tagline: string }[] = [
   { id: "classic", name: "Classic", tagline: "Warm, curious, on your side" },
@@ -80,36 +81,28 @@ export function Owl({ size = 40, mood = "idle", persona: personaProp, alive = fa
   const [bubble, setBubble] = useState<string | null>(null);
   const [talking, setTalking] = useState(false);
   const [hearts, setHearts] = useState(0);
-  const reactTimer = useRef<number | undefined>(undefined);
+    const reactTimer = useRef<number | undefined>(undefined);
 
-  const mode = reaction === "love" ? "love" : reaction === "dizzy" ? "dizzy" : reaction === "yawn" ? "sleepy" : mood;
+  const mode: OwlMood = reaction === "love" ? "love" : reaction === "dizzy" ? "dizzy" : reaction === "yawn" ? "sleepy" : mood;
 
   // ----- gaze: finger/cursor first, otherwise a wandering glance, otherwise the mood's own look -----
   useEffect(() => {
     if (!interactive || !live) return;
-    let raf = 0;
-    const onMove = (e: PointerEvent) => {
-      if (raf) return;
-      raf = requestAnimationFrame(() => {
-        raf = 0;
-        const r = root.current?.getBoundingClientRect();
-        if (!r || r.width === 0) return;
-        const dx = e.clientX - (r.left + r.width / 2), dy = e.clientY - (r.top + r.height * 0.49);
-        const d = Math.hypot(dx, dy) || 1, k = Math.min(1, d / 220);
-        lookX.set((dx / d) * MAXLOOK * k); lookY.set((dy / d) * MAXLOOK * k);
-        pointerUntil.current = performance.now() + 2600;
-      });
-    };
-    window.addEventListener("pointermove", onMove, { passive: true });
-    window.addEventListener("pointerdown", onMove, { passive: true });
-    return () => { window.removeEventListener("pointermove", onMove); window.removeEventListener("pointerdown", onMove); cancelAnimationFrame(raf); };
+    return subscribePointer((x, y) => {
+      const r = root.current?.getBoundingClientRect();
+      if (!r || r.width === 0) return;
+      const dx = x - (r.left + r.width / 2), dy = y - (r.top + r.height * 0.49);
+      const d = Math.hypot(dx, dy) || 1, k = Math.min(1, d / 220);
+      lookX.set((dx / d) * MAXLOOK * k); lookY.set((dy / d) * MAXLOOK * k);
+      pointerUntil.current = performance.now() + 2600;
+    });
   }, [interactive, live, lookX, lookY]);
 
   useEffect(() => {
     if (!live || mode === "think" || mode === "happy" || mode === "waiting" || mode === "dizzy" || mode === "love") return;
     let t: number, last = 0;
     const next = () => {
-      if (performance.now() > pointerUntil.current) {
+      if (!document.hidden && performance.now() > pointerUntil.current) {
         let i = Math.floor(Math.random() * GAZE.length);
         if (i === last) i = (i + 1) % GAZE.length;
         last = i; lookX.set(GAZE[i][0]); lookY.set(GAZE[i][1]);
@@ -136,7 +129,7 @@ export function Owl({ size = 40, mood = "idle", persona: personaProp, alive = fa
     let t: number;
     const go = () => {
       const double = Math.random() < 0.18;
-      void blink.start({ scaleY: double ? [1, 0.08, 1, 0.08, 1] : [1, 0.08, 1], transition: { duration: mode === "sleepy" ? 0.55 : double ? 0.4 : 0.2 } });
+      if (!document.hidden) void blink.start({ scaleY: double ? [1, 0.08, 1, 0.08, 1] : [1, 0.08, 1], transition: { duration: mode === "sleepy" ? 0.55 : double ? 0.4 : 0.2 } });
       t = window.setTimeout(go, (mode === "sleepy" ? 1400 : T.blink) + Math.random() * 3200);
     };
     t = window.setTimeout(go, 1200);
@@ -148,7 +141,7 @@ export function Owl({ size = 40, mood = "idle", persona: personaProp, alive = fa
     let t: number;
     const twitch = () => {
       const c = Math.random() < 0.5 ? earL : earR;
-      void c.start({ rotate: [0, -9, 5, 0], transition: { duration: 0.45 } });
+      if (!document.hidden) void c.start({ rotate: [0, -9, 5, 0], transition: { duration: 0.45 } });
       t = window.setTimeout(twitch, 4000 + Math.random() * 7000);
     };
     t = window.setTimeout(twitch, 3000);
@@ -208,11 +201,13 @@ export function Owl({ size = 40, mood = "idle", persona: personaProp, alive = fa
     haptic.tap();
     onTap?.();
     if (taps.current.length >= 5) { taps.current = []; react("dizzy", 3200, "whoa… stop 😵"); haptic.warn(); return; }
-    const pick = (["wink", "hoot", "puff", "spin"] as const)[Math.floor(Math.random() * 4)];
+    const pick = (["wink", "hoot", "puff", "spin", "nod", "tilt"] as const)[Math.floor(Math.random() * 6)];
     if (pick === "wink") react("wink", 1100);
     else if (pick === "hoot") { react("hoot", 1700, say()); void hop.start({ y: [0, -size * 0.12, 0], transition: { duration: 0.35 } }); }
     else if (pick === "puff") { react("puff", 700); void hop.start({ scaleX: [1, 1.14, 1], scaleY: [1, 1.14, 1], transition: { duration: 0.5, ease: "easeOut" } }); }
-    else { react("spin", 900); void hop.start({ rotate: [0, 360], scale: [1, 1.1, 1], transition: { duration: 0.7, ease: [0.3, 0.7, 0.2, 1] } }); }
+    else if (pick === "spin") { react("spin", 900); void hop.start({ rotate: [0, 360], scale: [1, 1.1, 1], transition: { duration: 0.7, ease: [0.3, 0.7, 0.2, 1] } }); }
+    else if (pick === "nod") { react("nod", 700); void hop.start({ y: [0, size * 0.05, 0, size * 0.04, 0], transition: { duration: 0.6, ease: "easeInOut" } }); }
+    else { react("tilt", 900); void hop.start({ rotate: [0, 9, 9, 0], transition: { duration: 0.9, times: [0, 0.25, 0.7, 1], ease: "easeInOut" } }); }
   };
 
   const happy = mode === "happy";
@@ -224,11 +219,12 @@ export function Owl({ size = 40, mood = "idle", persona: personaProp, alive = fa
   const tilt = who === "sassy" && !happy ? 6 : 0;
 
   return (
-    <motion.div ref={root}
-      animate={live ? (mode === "waiting" || T.sway ? { y: [0, -size * bob, 0], rotate: [tilt, tilt - Math.max(7, T.sway), tilt, tilt + Math.max(7, T.sway), tilt] } : { y: [0, -size * bob, 0], rotate: tilt }) : { rotate: tilt }}
-      transition={live ? { y: { duration: period, repeat: Infinity, ease: "easeInOut" }, rotate: { duration: mode === "waiting" ? 6 : 8, repeat: Infinity, ease: "easeInOut" } } : { duration: 0.3 }}
+    // The idle bob and sway are CSS keyframes (compositor-driven, no per-frame JavaScript), and
+    // pause on their own when the app isn't visible.
+    <div ref={root} className="owl-root" data-live={live} data-sway={live && (mode === "waiting" || T.sway > 0)}
       onPointerDown={onDown} onPointerMove={onMoveOwl} onPointerUp={onUp} onPointerCancel={() => window.clearTimeout(press.current.timer)}
-      style={{ width: size, height: size, lineHeight: 0, position: "relative", touchAction: interactive ? "manipulation" : undefined, cursor: interactive ? "pointer" : undefined, userSelect: "none", WebkitUserSelect: "none" }}>
+      style={{ width: size, height: size, lineHeight: 0, position: "relative", touchAction: interactive ? "manipulation" : undefined, cursor: interactive ? "pointer" : undefined, userSelect: "none", WebkitUserSelect: "none",
+        "--bob": `${size * bob}px`, "--period": `${period}s`, "--tilt": `${tilt}deg`, "--sway": `${Math.max(7, T.sway)}deg`, "--swayT": mode === "waiting" ? "6s" : "8s" } as React.CSSProperties}>
       <motion.svg width={size} height={size} viewBox="0 0 1024 1024" animate={hop} aria-hidden style={{ overflow: "visible", transformOrigin: "50% 80%" }}>
         <defs>
           <linearGradient id={`${id}bg`} x1="0" y1="0" x2="1" y2="1"><stop offset="0" stopColor={C.bg0} /><stop offset="1" stopColor={C.bg1} /></linearGradient>
@@ -238,8 +234,9 @@ export function Owl({ size = 40, mood = "idle", persona: personaProp, alive = fa
         </defs>
         {face && <><rect width="1024" height="1024" rx="232" fill={`url(#${id}bg)`} /><rect width="1024" height="1024" rx="232" fill={`url(#${id}gl)`} /></>}
 
+
         {who === "hype" && live && [[150, 250, 0], [880, 280, 0.6], [820, 150, 1.2]].map(([x, y, d]) => (
-          <motion.path key={`${x}`} d="M0 -34 L9 -9 L34 0 L9 9 L0 34 L-9 9 L-34 0 L-9 -9Z" fill="#FFE08A" style={{ x, y }} animate={{ scale: [0, 1, 0], rotate: [0, 90] }} transition={{ duration: 1.6, repeat: Infinity, delay: d }} />
+          <g key={x} transform={`translate(${x} ${y})`}><path className="owl-spark" d="M0 -34 L9 -9 L34 0 L9 9 L0 34 L-9 9 L-34 0 L-9 -9Z" fill="#FFE08A" style={{ animationDelay: `${d}s` }} /></g>
         ))}
 
         {who === "chill" && <path d="M200 520 C196 300 330 262 512 262 C694 262 828 300 824 520" fill="none" stroke="#2D2D40" strokeWidth="38" strokeLinecap="round" />}
@@ -291,8 +288,8 @@ export function Owl({ size = 40, mood = "idle", persona: personaProp, alive = fa
         )}
         {who === "sassy" && (
           <g stroke={C.head} strokeWidth="26" strokeLinecap="round" fill="none">
-            <motion.path d="M252 350 L452 386" animate={{ y: [0, 0, 6, 0] }} transition={{ duration: 5, repeat: live ? Infinity : 0 }} />
-            <motion.path d="M580 352 Q700 292 780 306" animate={{ y: [0, -10, 0] }} transition={{ duration: 3.2, repeat: live ? Infinity : 0, ease: "easeInOut" }} />
+            <path d="M252 350 L452 386" />
+            <path className={live ? "owl-brow" : undefined} d="M580 352 Q700 292 780 306" />
           </g>
         )}
 
@@ -312,8 +309,7 @@ export function Owl({ size = 40, mood = "idle", persona: personaProp, alive = fa
         )}
 
         {mode === "sleepy" && live && [0, 1, 2].map((i) => (
-          <motion.text key={i} x="790" y="300" fontSize={130 - i * 14} fontWeight="800" fill={C.cream} fontFamily="system-ui, sans-serif"
-            initial={{ opacity: 0 }} animate={{ opacity: [0, 0.95, 0], y: [0, -150], x: [0, 40] }} transition={{ duration: 2.6, repeat: Infinity, delay: i * 0.85, ease: "easeOut" }}>z</motion.text>
+          <text key={i} className="owl-z" x="790" y="300" fontSize={130 - i * 14} fontWeight="800" fill={C.cream} fontFamily="system-ui, sans-serif" style={{ animationDelay: `${i * 0.85}s` }}>z</text>
         ))}
 
         <AnimatePresence>
@@ -331,7 +327,7 @@ export function Owl({ size = 40, mood = "idle", persona: personaProp, alive = fa
           </motion.div>
         )}
       </AnimatePresence>
-    </motion.div>
+    </div>
   );
 }
 

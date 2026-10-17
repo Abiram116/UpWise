@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "react-router";
 import { motion } from "motion/react";
 import { Search } from "lucide-react";
@@ -22,6 +22,11 @@ export function LibraryScreen() {
   const filter = (params.get("f") as Filter) || "todo";
   const cat = params.get("cat");
 
+  // Rows render in chunks of 30 as you approach the end of the list, so a library of hundreds
+  // costs the same as a library of thirty. (Reset whenever the view changes.)
+  const [limit, setLimit] = useState(30);
+  const sentinel = useRef<HTMLDivElement>(null);
+  useEffect(() => { setLimit(30); }, [filter, cat, debouncedQ]);
   const list = useMemo(() => {
     let l = items.data ?? [];
     const todo: ItemStatus[] = ["inbox", "queued", "in_progress"];
@@ -46,6 +51,14 @@ export function LibraryScreen() {
     }
     return l;
   }, [items.data, filter, cat, q, transcriptHits]);
+
+  useEffect(() => {
+    const el = sentinel.current;
+    if (!el) return;
+    const io = new IntersectionObserver((e) => { if (e[0]?.isIntersecting) setLimit((l) => l + 30); }, { rootMargin: "600px" });
+    io.observe(el);
+    return () => io.disconnect();
+  }, [list.length, limit]);
 
   const set = (k: string, v: string | null) => {
     const p = new URLSearchParams(params);
@@ -94,9 +107,10 @@ export function LibraryScreen() {
           body={q ? "Try a different search." : filter === "done" ? "Finish something and it lands here." : filter === "links" ? "Notes, reference reels and websites land here — kept, never in your study list." : "Share a video, reel or article to get started."} />
       ) : (
         <motion.div className="rows" variants={stagger} initial="hidden" animate="show" key={`${filter}-${cat}-${debouncedQ}`}>
-          {list.map((i) => <ItemRow key={i.id} item={i} />)}
+          {list.slice(0, limit).map((i, n) => <ItemRow key={i.id} item={i} shared={n < 12} />)}
         </motion.div>
       )}
+      {list.length > limit && <div ref={sentinel} style={{ height: 1 }} />}
 
     </Page>
   );

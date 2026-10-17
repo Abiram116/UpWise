@@ -205,15 +205,22 @@ export function ErrorState({ error, onRetry }: { error: unknown; onRetry?: () =>
 }
 
 // One authored entrance per page; sections inside do not animate separately.
+// Shared-axis transition: screens slide in from the side you're navigating towards. The
+// direction (+1 / -1) comes from AppShell via AnimatePresence's `custom`.
+const pageVariants = {
+  hidden: (d: number) => ({ opacity: 0, x: (d || 1) * 32 }),
+  show: { opacity: 1, x: 0, transition: { duration: 0.38, ease: [0.05, 0.7, 0.1, 1] as const } },
+  exit: (d: number) => ({ opacity: 0, x: -(d || 1) * 22, transition: { duration: 0.16 } }),
+};
 export function Page({ children, className }: { children: ReactNode; className?: string }) {
   const reduce = useReducedMotion();
   return (
     <motion.div
       className={cx("page", className)}
-      initial={reduce ? false : { opacity: 0, y: 10 }}
-      animate={{ opacity: 1, y: 0 }}
-      exit={reduce ? undefined : { opacity: 0, y: -6, transition: { duration: 0.15 } }}
-      transition={{ duration: 0.36, ease: [0.05, 0.7, 0.1, 1] }}
+      variants={reduce ? undefined : pageVariants}
+      initial={reduce ? false : "hidden"}
+      animate="show"
+      exit={reduce ? undefined : "exit"}
     >
       {children}
     </motion.div>

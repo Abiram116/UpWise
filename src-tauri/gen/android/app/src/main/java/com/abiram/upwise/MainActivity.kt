@@ -62,6 +62,7 @@ class MainActivity : TauriActivity() {
   override fun onCreate(savedInstanceState: Bundle?) {
     enableEdgeToEdge()
     super.onCreate(savedInstanceState)
+    requestHighRefreshRate()
     handleShare(intent)
     handleNotificationTap(intent)
     handleShortcut(intent)
@@ -263,6 +264,25 @@ class MainActivity : TauriActivity() {
           Log.e("UpWise", "openInstallPermissionSettings failed", e)
         }
       }
+    }
+  }
+
+  // By default many apps stay pinned at 60 Hz even on a 120 Hz phone. Ask for the panel's highest
+  // rate at the current resolution, and (Android 15+) tell the frame-rate system this window wants
+  // the HIGH category. The system still drops the rate when nothing is moving.
+  private fun requestHighRefreshRate() {
+    try {
+      val d = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) display else @Suppress("DEPRECATION") windowManager.defaultDisplay
+      if (d != null && Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+        val cur = d.mode
+        val best = d.supportedModes
+          .filter { it.physicalWidth == cur.physicalWidth && it.physicalHeight == cur.physicalHeight }
+          .maxByOrNull { it.refreshRate }
+        if (best != null) window.attributes = window.attributes.also { it.preferredDisplayModeId = best.modeId }
+      }
+      if (Build.VERSION.SDK_INT >= 35) window.decorView.setRequestedFrameRate(android.view.View.REQUESTED_FRAME_RATE_CATEGORY_HIGH)
+    } catch (e: Exception) {
+      Log.w("UpWise", "high refresh rate request failed", e)
     }
   }
 

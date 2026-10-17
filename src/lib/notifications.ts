@@ -2,7 +2,7 @@ import {
   cancelAll, createChannel, Importance, isPermissionGranted, registerActionTypes, requestPermission,
   Schedule, sendNotification as send, Visibility, type Options,
 } from "@tauri-apps/plugin-notification";
-import { isAndroid, isMobile, isTauri } from "./platform";
+import { isAndroid, isMobile } from "./platform";
 import { activeHours, breakDaySet, heuristicPick, isOnBreak, streak, todayMinutes, weekly } from "./stats";
 import { logNotification } from "./api";
 import { bestSlot } from "./slot";
@@ -36,7 +36,7 @@ function sendNotification(o: Options) {
 }
 
 export async function ensurePermission(): Promise<boolean> {
-  if (!isTauri) return false;
+  if (!isMobile()) return false;
   try {
     if (await isPermissionGranted()) return true;
     return (await requestPermission()) === "granted";
@@ -186,6 +186,7 @@ function planFor(input: PlanInput, now: Date): Planned[] {
 
 /** What's coming, for Settings — the same plan the scheduler uses, soonest first. */
 export function previewPlan(input: PlanInput): Planned[] {
+  if (!isMobile()) return [];
   const s = settingsOf(input.profile);
   if (!s.enabled || isOnBreak(input.profile.settings)) return [];
   const now = new Date();
@@ -227,7 +228,7 @@ function schedule(n: Planned, now: Date) {
  * rather than stacks, and cancelAll() clears anything no longer wanted (e.g. the evening goal
  * nudge once you've hit today's goal). */
 export async function replanNotifications(input: PlanInput): Promise<number> {
-  if (!isTauri) return 0;
+  if (!isMobile()) return 0; // notifications are a phone feature
   const { profile, activity } = input;
   for (const t of desktopTimers) clearTimeout(t);
   desktopTimers = [];

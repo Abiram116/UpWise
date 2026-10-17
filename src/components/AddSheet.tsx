@@ -6,6 +6,7 @@ import { saveNote, useAnalyze, useCategories, useSetStatus, useUpdateItem, type 
 import { haptic } from "../lib/haptics";
 import { extractUrl, fmtMinutes, detectSource, FORMAT_LABEL, formatOf } from "../lib/utils";
 import { FormatIcon } from "./ItemCard";
+import { ItemThumb } from "./CoverArt";
 
 /** What UpWise thinks it's about to save, before it's saved. */
 function previewLabel(url: string, source: ReturnType<typeof detectSource>): string {
@@ -223,7 +224,7 @@ function ResultCard({ result, onDone }: { result: { item: Item; duplicate: boole
       <motion.div className="col" style={{ gap: 16 }} initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={spring}>
         <div className="row" style={{ gap: 8 }}><Chip tone="primary">Saved to your links</Chip></div>
         <div className="row" style={{ gap: 14 }}>
-          <div className="thumb" data-tone="warm">{item.thumbnail_url ? <img src={item.thumbnail_url} alt="" /> : <FormatIcon item={item} size={22} />}</div>
+          <div className="thumb"><ItemThumb item={item} /></div>
           <div className="grow col" style={{ gap: 2 }}>
             <h3 className="title clamp-2">{item.title}</h3>
             <p className="meta truncate">{item.channel}</p>
@@ -251,7 +252,7 @@ function ResultCard({ result, onDone }: { result: { item: Item; duplicate: boole
         {ai_error && <Chip tone="error">AI unavailable</Chip>}
       </div>
 
-      {item.thumbnail_url && <div className="thumb thumb-lg"><img src={item.thumbnail_url} alt="" /></div>}
+      <div className="thumb thumb-lg"><ItemThumb item={item} /></div>
 
       {possibleDup && !dupSkipped && (
         <div className="slab col" style={{ gap: 8 }}>

@@ -8,6 +8,7 @@ import { useBackHandler } from "../lib/backHandler";
 import { haptic } from "../lib/haptics";
 import { isTauri } from "../lib/platform";
 import { ensurePermission } from "../lib/notifications";
+import { isMobile } from "../lib/platform";
 import { extractNotes } from "../lib/changelog";
 import { BrandMark } from "./BrandMark";
 import { Pill, spring, easeOut } from "./ui";
@@ -32,7 +33,8 @@ export function WhatsNewGate({ children }: { children: ReactNode }) {
         if (seen === version) return;
         const [relRes, granted] = await Promise.all([
           fetch(`https://api.github.com/repos/${RELEASE_REPO}/releases/tags/v${version}`),
-          isPermissionGranted().catch(() => true),
+          // Notifications only exist on the phone — never ask about them on the laptop.
+          isMobile() ? isPermissionGranted().catch(() => true) : Promise.resolve(true),
         ]);
         setNeedsNotifPermission(!granted);
         if (!relRes.ok) { try { localStorage.setItem(SEEN_KEY, version); } catch { /* ignore */ } return; }

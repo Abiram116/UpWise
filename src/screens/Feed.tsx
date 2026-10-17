@@ -16,6 +16,7 @@ import { Owl } from "../components/BrandMark";
 import { celebrateDone } from "../components/Celebrate";
 import { FinishSheet } from "../components/FinishSheet";
 import { FormatIcon } from "../components/ItemCard";
+import { ItemThumb } from "../components/CoverArt";
 import { useSessionStore } from "../components/SessionBar";
 import { Pill, Skeleton, spring, useToast } from "../components/ui";
 
@@ -133,7 +134,10 @@ export function FeedScreen() {
 
       <div className="feed" ref={scroller} onScroll={onScroll}>
         {noQuick && <p className="feed-note">Nothing quick right now — showing everything.</p>}
-        {list.map((it, i) => (
+        {/* Windowed: only the card on screen and its neighbours are real; the rest are empty
+            snap-points of the same height. DOM size, images and reconciliation stay constant
+            however long the list gets. */}
+        {list.map((it, i) => Math.abs(i - active) > 2 ? <section key={it.id} className="feed-card" aria-hidden /> : (
           <FeedCard key={it.id} item={it} near={Math.abs(i - active) <= 1} busy={busy === it.id} hint={i === 0 && !hinted && list.length > 1}
             reference={it.status === "saved"} onLearn={() => { haptic.success(); setStatus(it.id, "inbox").then(() => toast("Moved to To learn"), fail("Couldn't move it")); }}
             onOpen={() => nav(`/item/${it.id}`)} onStart={() => begin(it)} onLearned={() => onLearned(it)} onSkip={() => skip(it)} />
@@ -163,13 +167,14 @@ function FeedCard({ item, near, busy, hint, reference, onLearn, onOpen, onStart,
   return (
     <section className="feed-card" data-busy={busy}>
       {near && item.thumbnail_url && <div className="feed-bg" style={{ backgroundImage: `url(${item.thumbnail_url})` }} />}
+      {near && !item.thumbnail_url && <div className="feed-bg feed-bg-cover" />}
       <div className="feed-shade" />
       <button className="feed-media" onClick={onOpen} aria-label="Open details">
-        <div className="feed-thumb" data-tall={tall} data-format={format} data-empty={!item.thumbnail_url}>
-          {near && item.thumbnail_url ? <img src={item.thumbnail_url} alt="" decoding="async" /> : <FormatIcon item={item} size={44} />}
+        <div className="feed-thumb" data-tall={tall} data-format={format}>
+          {near && <ItemThumb item={item} />}
           {hint && (
             <span className="feed-hint">
-              <motion.span animate={{ y: [0, -5, 0] }} transition={{ duration: 1.3, repeat: Infinity, ease: "easeInOut" }} style={{ display: "inline-flex" }}><ChevronUp size={18} /></motion.span>
+              <span className="hint-bob"><ChevronUp size={18} /></span>
               Swipe up for the next
             </span>
           )}

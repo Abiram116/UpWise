@@ -8,7 +8,7 @@ import { ensurePermission, previewPlan, replanNotifications, settingsOf } from "
 import { describeError, isNetworkError } from "../lib/errors";
 import "../lib/android-bridge";
 import { checkForUpdate, currentVersion, type UpdateInfo } from "../lib/updater";
-import { isTauri, platform } from "../lib/platform";
+import { isMobile, isTauri, platform } from "../lib/platform";
 import { RELEASE_REPO } from "../lib/config";
 import { applyPalette, applyTheme, currentPalette, wallpaperAvailable, type Palette as PaletteName, type Theme } from "../theme";
 import { isOnBreak } from "../lib/stats";
@@ -65,7 +65,7 @@ export function SettingsScreen() {
   );
   const saveSettings = async (patch: Partial<Profile["settings"]>) => {
     const next = { ...(p?.settings ?? {}), ...patch };
-    if ((patch.enabled || patch.weekly_recap) && isTauri && !(await ensurePermission())) { notificationsBlocked(); return; }
+    if ((patch.enabled || patch.weekly_recap) && isMobile() && !(await ensurePermission())) { notificationsBlocked(); return; }
     try { await update.mutateAsync({ settings: next }); }
     catch (e) { fail("Couldn't save that")(e); return; }
     if (p && items.data && sessions.data) {
@@ -138,6 +138,7 @@ export function SettingsScreen() {
         </button>
       </Group>
 
+      {isMobile() && (
       <Group title="Notifications" hint={onBreak ? "Paused while you're on a break." : "A morning plan, a nudge for things waiting too long, and a reminder when today's goal is close — timed from when you actually learn. Wins show up in the app, not as notifications."}>
         <div className="setting">
           <span className="setting-icon"><Bell size={18} /></span>
@@ -157,6 +158,7 @@ export function SettingsScreen() {
           </div>
         )}
       </Group>
+      )}
 
 
 

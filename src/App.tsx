@@ -52,14 +52,24 @@ export default function App() {
 
 const ONBOARDED_KEY = "upwise:onboarded";
 
+/** The launch splash is an overlay: the app boots underneath it, and when both the session check
+ * and the animation are done an iris closes on the owl, revealing a ready app. */
 function Gate() {
+  const { loading } = useAuth();
+  const reduce = useReducedMotion();
+  const [minDone, setMinDone] = useState(reduce === true);
+  useEffect(() => { if (minDone) return; const t = window.setTimeout(() => setMinDone(true), 1250); return () => window.clearTimeout(t); }, [minDone]);
+  const ready = !loading && minDone;
+  const [overlay, setOverlay] = useState(true);
+  useEffect(() => { if (!ready) return; const t = window.setTimeout(() => setOverlay(false), reduce ? 0 : 780); return () => window.clearTimeout(t); }, [ready, reduce]);
+  return <>{!loading && <GateInner />}{overlay && <Splash leaving={ready} />}</>;
+}
+
+function GateInner() {
   const { session, loading, configError, needsPin } = useAuth();
   const profile = useProfile(!!session);
   // Read synchronously (not via the async Tauri store) so a returning user's app shell can
   // paint on the very first render instead of waiting on a network profile fetch every cold start.
-  const reduceMotion = useReducedMotion();
-  const [splashDone, setSplashDone] = useState(() => reduceMotion === true);
-  useEffect(() => { if (splashDone) return; const t = window.setTimeout(() => setSplashDone(true), 1250); return () => window.clearTimeout(t); }, [splashDone]);
   const [cachedOnboarded] = useState(() => { try { return localStorage.getItem(ONBOARDED_KEY) === "1"; } catch { return false; } });
 
   useEffect(() => {
@@ -67,8 +77,7 @@ function Gate() {
     try { localStorage.setItem(ONBOARDED_KEY, profile.data.onboarded ? "1" : "0"); } catch { /* ignore */ }
   }, [profile.data?.onboarded]);
 
-  // Cold start: show the owl's assembly animation for a beat even when the session resumes instantly.
-  if (loading || !splashDone) return <Splash />;
+  if (loading) return null; // (the splash overlay covers this)
   if (needsPin) return <Suspense fallback={<Center><Spinner size={26} /></Center>}><PinGate /></Suspense>;
   if (configError) {
     return (

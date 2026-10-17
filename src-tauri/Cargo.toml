@@ -1,6 +1,6 @@
 [package]
 name = "upwise"
-version = "1.1.0"
+version = "1.2.0"
 description = "UpWise - personal AI-powered learning tracker"
 authors = ["Abiram"]
 edition = "2021"

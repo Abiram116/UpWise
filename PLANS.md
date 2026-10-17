@@ -119,6 +119,16 @@ Living backlog of things to build next. Nothing here is built yet — this is th
 - [x] **New icon.** Minimal owl — two eyes glancing up-right, apricot beak, on sage.
 - Next: Gemini Nano (ML Kit GenAI Prompt API) for instant offline cheer/Today lines once it can be tested on the device.
 
+### v1.2.0 — motion graphics, performance, cover art
+
+- [x] **Cinematic launch**: light-sweep + drifting particle field, owl assembling under a slow camera push-in, eyes igniting with a bloom, pupils darting, beak spark-burst, masked kinetic wordmark with a drawn rule, then an iris closing onto the owl to reveal the already-booted app.
+- [x] **Celebrations are scenes**: rotating light rays, expanding shockwave rings, masked kinetic text, per-win accent colours, plus the original playful owl reactions (hearts, dizzy spin, sparkles, cap toss) — kept on purpose.
+- [x] **Kinetic headline** on Today (words slide up out of masks, digits count up), directional shared-axis page transitions between tabs, owl peeks up on entry.
+- [x] **Feed depth**: scroll-driven CSS animations (compositor, zero scroll listeners) on the card timeline.
+- [x] **Performance (measured)**: idle main-thread time on Today −70% (488 → ~145 ms per 6 s). Idle loops are CSS keyframes, not per-frame JS; one shared pointer listener for all owls; hidden-tab guards; Library renders in chunks of 30 with an IntersectionObserver; Feed is windowed to ±2 cards; blur backdrops are downscaled 16×; no `backdrop-filter`; persister throttle 5 s; store writes batched; confetti at 1.5× DPR.
+- [x] **120 Hz**: the app requests the panel's highest refresh rate (preferred display mode + Android 15 frame-rate category HIGH). Everything animated is time-based, so it's frame-rate independent.
+- [x] **Generated cover art** for anything without a preview image (or whose image fails): per-format palettes and glyphs (video, Short, reel, post, article drop-cap, link globe, topic bulb, note), seeded per item. Real images always win.
+
 ### v1.1.0 — companion pass 2
 
 - [x] **Save anything, not just study material.** Reels/videos can be kept as a *reference* (one tap: "Just a reference, not to study") and live in Saved; typed text becomes a **note** (check it off when done) or a **topic to research** (goes to To learn; Start searches for it). Created on-device, no AI, works offline. Shared plain text from any app becomes a note.

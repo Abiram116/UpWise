@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { AnimatePresence, motion } from "motion/react";
 import { useProfile, useUpdateProfile } from "../lib/api";
 import { ensurePermission, sendTestNotification } from "../lib/notifications";
-import { isAndroid, isTauri } from "../lib/platform";
+import { isAndroid, isMobile } from "../lib/platform";
 import { DEFAULT_NOTIFICATIONS } from "../lib/config";
 import { Chip, Pill, easeOut, spring, useToast } from "../components/ui";
 import { describeError } from "../lib/errors";
@@ -51,12 +51,12 @@ export function Onboarding() {
     try {
       await update.mutateAsync({
         goal, interests, daily_target_minutes: target, onboarded: true,
-        settings: { ...DEFAULT_NOTIFICATIONS, enabled: notif !== false },
+        settings: { ...DEFAULT_NOTIFICATIONS, enabled: isMobile() && notif !== false },
       });
     } catch (e) { toast(`Couldn't save your setup — ${describeError(e).message}`); }
   };
 
-  const steps = [
+  const allSteps = [
     <Welcome key="0" name={profile.data?.display_name?.split(" ")[0]} />,
     <Step key="1" title="What are you aiming for?" body="Every link gets scored on how much it helps this.">
       <div className="chips">{GOALS.map((g) => <Chip key={g} active={g === goal} onClick={() => setGoal(g)}>{g}</Chip>)}</div>
@@ -68,7 +68,7 @@ export function Onboarding() {
       <div className="chips">{TARGETS.map((t) => <Chip key={t} active={t === target} onClick={() => setTarget(t)}>{t} min</Chip>)}</div>
     </Step>,
     <Step key="3" title="Nudges, on your terms." body="UpWise learns when you actually learn and nudges you then. A couple a day at most, never at night, mutable per category.">
-      {isTauri ? (
+      {isMobile() ? (
         <div className="row" style={{ gap: 8 }}>
           <Pill variant="tonal" size="lg" className="grow" onClick={() => setNotif(false)}>Not now</Pill>
           <Pill variant="filled" size="lg" className="grow" onClick={async () => { const ok = await ensurePermission(); setNotif(ok); if (ok) void sendTestNotification(); }}>
@@ -84,6 +84,8 @@ export function Onboarding() {
       )}
     </Step>,
   ];
+  // Notifications are a phone feature: the laptop skips the "Nudges" step entirely.
+  const steps = isMobile() ? allSteps : allSteps.filter((st) => st.key !== "3");
 
   const last = step === steps.length - 1;
   return (

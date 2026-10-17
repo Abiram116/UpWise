@@ -1,4 +1,4 @@
-import { Suspense, useEffect, useState } from "react";
+import { Suspense, useEffect, useRef, useState } from "react";
 import { NavLink, Outlet, useLocation, useNavigate } from "react-router";
 import { AnimatePresence, motion } from "motion/react";
 import { BarChart3, GalleryVertical, Home, Library, Plus, Settings } from "lucide-react";
@@ -70,6 +70,16 @@ export function AppShell() {
     if (loc.pathname !== "/") { nav("/", { replace: true }); return true; }
     return false;
   });
+  // Which way did we just navigate? Tabs are ordered; opening an item goes deeper (forward).
+  const prevPath = useRef(loc.pathname);
+  const dirRef = useRef(1);
+  if (prevPath.current !== loc.pathname) {
+    const order = ["/", "/feed", "/library", "/stats", "/settings"];
+    const rank = (p: string) => (p.startsWith("/item") ? 99 : Math.max(0, order.indexOf(p)));
+    const a = rank(prevPath.current), b = rank(loc.pathname);
+    dirRef.current = b >= a ? 1 : -1;
+    prevPath.current = loc.pathname;
+  }
   const showFab = loc.pathname === "/" || loc.pathname === "/library";
 
   // .app-main has no overflow rule of its own — the window/document is the real scroll
@@ -91,7 +101,7 @@ export function AppShell() {
       <main className="app-main">
         <ConnectionBanner />
         <Suspense fallback={<div style={{ display: "grid", placeItems: "center", minHeight: "40dvh" }}><Spinner size={26} /></div>}>
-          <AnimatePresence mode="wait" initial={false}>
+          <AnimatePresence mode="wait" initial={false} custom={dirRef.current}>
             <div key={loc.pathname.split("/")[1] || "home"}><Outlet /></div>
           </AnimatePresence>
         </Suspense>

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router";
-import { AnimatePresence, motion } from "motion/react";
+import { motion } from "motion/react";
 import { Clock, Flame, Play, Shield, Snowflake } from "lucide-react";
 import { useActivity, useItems, useProfile, useSessions } from "../lib/api";
 import { loadOpens, bestSlot, fmtSlot } from "../lib/slot";
@@ -16,9 +16,11 @@ import { ItemRow, FormatIcon } from "../components/ItemCard";
 import { Owl } from "../components/BrandMark";
 import { StreakSheet } from "../components/StreakSheet";
 import { OwlPersonaSheet } from "../components/OwlPersona";
+import { MaskText } from "../components/MaskText";
+import { ItemThumb } from "../components/CoverArt";
 import { useStreak } from "../lib/useStreak";
 import { useSessionStore } from "../components/SessionBar";
-import { ErrorState, Page, Pill, Rise, Skeleton, spring, stagger, useToast } from "../components/ui";
+import { ErrorState, Page, Pill, Rise, Skeleton, stagger, useToast } from "../components/ui";
 
 const TO_LEARN = new Set(["inbox", "queued", "in_progress"]);
 
@@ -88,11 +90,11 @@ export function HomeScreen() {
     <Page>
       <header className="col" style={{ gap: 18 }}>
         <div className="row between">
-          <div className="owl-btn" role="button" aria-label={hasNext ? "Hear the owl's new thought" : "Your owl"}>
+          <motion.div className="owl-btn" initial={{ y: 28, opacity: 0, scale: 0.8 }} animate={{ y: 0, opacity: 1, scale: 1 }} transition={{ type: "spring", stiffness: 360, damping: 18, delay: 0.12 }} role="button" aria-label={hasNext ? "Hear the owl's new thought" : "Your owl"}>
             <Owl size={58} alive interactive onLongPress={() => setPersonaOpen(true)} onTap={() => { if (hasNext) reveal(); }} mood={owlMoodFor(ctx, { loading, onBreak })}
               speakKey={line} speakMs={Math.min(2600, 700 + line.length * 38)} />
-            {hasNext && <motion.span className="owl-dot" initial={{ scale: 0 }} animate={{ scale: [1, 1.25, 1] }} transition={{ duration: 1.6, repeat: Infinity }} />}
-          </div>
+            {hasNext && <span className="owl-dot" />}
+          </motion.div>
           <div className="row" style={{ gap: 8 }}>
             {streakInfo && (st > 0 || streakInfo.bank > 0) && (
               <button className="stat-pill" data-ice={streakInfo.onIce} style={streakInfo.onIce ? undefined : { color: "var(--warm)" }} onClick={() => { haptic.select(); setStreakOpen(true); }} aria-label={`${st} day streak, ${streakInfo.bank} freeze days banked`}>
@@ -103,25 +105,17 @@ export function HomeScreen() {
             {!onBreak && <GoalRing minutes={today} target={target} onClick={() => nav("/stats")} />}
           </div>
         </div>
-        <AnimatePresence mode="wait" initial={false}>
-          <motion.h1 key={line} className="display friend-line" data-long={line.length > 60}
-            initial="hidden" animate="show" exit={{ opacity: 0, y: -6, transition: { duration: 0.15 } }}
-            variants={{ hidden: {}, show: { transition: { staggerChildren: 0.035 } } }}>
-            {line.split(" ").map((w, i) => (
-              <motion.span key={i} style={{ display: "inline-block", marginRight: "0.26em" }}
-                variants={{ hidden: { opacity: 0, y: 12, filter: "blur(5px)" }, show: { opacity: 1, y: 0, filter: "blur(0px)", transition: { duration: 0.42, ease: [0.05, 0.7, 0.1, 1] } } }}>{w}</motion.span>
-            ))}
-          </motion.h1>
-        </AnimatePresence>
+        {/* Kinetic headline: each word slides up out of its mask; digits count up. */}
+        <h1 className="display friend-line" data-long={line.length > 60}><MaskText key={line} text={line} step={0.04} /></h1>
       </header>
 
       {!items.data && items.isError ? <ErrorState error={items.error} onRetry={() => items.refetch()} />
         : items.isPending ? <Skeleton h={260} r={28} />
         : pick ? (
           <Rise>
-            <motion.section className="slab pick" layout transition={spring}>
+            <motion.section className="slab pick">
               <button className="col" style={{ gap: 14, textAlign: "left", width: "100%" }} onClick={() => nav(`/item/${pick.id}`)}>
-                {pick.thumbnail_url && <div className="thumb thumb-lg"><img src={pick.thumbnail_url} alt="" /></div>}
+                <div className="thumb thumb-lg"><ItemThumb item={pick} /></div>
                 <div className="col" style={{ gap: 8 }}>
                   <h2 className="headline focal clamp-3">{pick.title}</h2>
                   <p className="meta row wrap" style={{ gap: 10 }}>

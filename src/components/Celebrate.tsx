@@ -7,6 +7,7 @@ import { confetti, stopConfetti, type Pattern } from "../lib/confetti";
 import { haptic } from "../lib/haptics";
 import { useBackHandler } from "../lib/backHandler";
 import { Owl } from "./BrandMark";
+import { MaskText } from "./MaskText";
 import { queryClient } from "../lib/queryClient";
 import type { Item } from "../lib/types";
 
@@ -208,7 +209,7 @@ function StreakHero({ n = 1 }: { n?: number }) {
   return (
     <div className="celebrate-hero" style={{ width: 140, height: 140 }}>
       <motion.svg width="140" height="140" viewBox="0 0 120 120" animate={{ scaleY: [1, 1.07, 0.97, 1.05, 1], skewX: [0, 2.5, -2, 1.5, 0] }}
-        transition={{ duration: 1.1, repeat: Infinity, ease: "easeInOut" }} style={{ transformOrigin: "60px 112px" }}>
+        transition={{ duration: 1.1, repeat: 5, ease: "easeInOut" }} style={{ transformOrigin: "60px 112px" }}>
         <defs>
           <linearGradient id="fl" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stopColor="#FFC24F" /><stop offset="1" stopColor="#FF6B4A" /></linearGradient>
           <linearGradient id="fi" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stopColor="#FFF3C4" /><stop offset="1" stopColor="#FFC24F" /></linearGradient>
@@ -232,7 +233,7 @@ function ShieldHero() {
       </motion.svg>
       <motion.b className="celebrate-trophy-num num" style={{ color: "#0d3b5c", bottom: 30 }} initial={{ opacity: 0, scale: 0.4 }} animate={{ opacity: 1, scale: 1 }} transition={{ delay: 0.5, type: "spring", stiffness: 400, damping: 14 }}>+2</motion.b>
       {[0, 1, 2, 3, 4, 5].map((i) => (
-        <motion.span key={i} className="celebrate-flake" style={{ left: `${20 + i * 12}%` }} initial={{ y: 0, opacity: 0 }} animate={{ y: [0, 60], opacity: [0, 1, 0], rotate: [0, 120] }} transition={{ duration: 1.8, repeat: Infinity, delay: i * 0.3 }}>❄</motion.span>
+        <motion.span key={i} className="celebrate-flake" style={{ left: `${20 + i * 12}%` }} initial={{ y: 0, opacity: 0 }} animate={{ y: [0, 60], opacity: [0, 1, 0], rotate: [0, 120] }} transition={{ duration: 1.8, repeat: 2, delay: i * 0.3 }}>❄</motion.span>
       ))}
     </div>
   );
@@ -245,7 +246,7 @@ function ClearedHero() {
       {[0, 1, 2, 3, 4].map((i) => (
         <motion.svg key={i} className="celebrate-spark" width="18" height="18" viewBox="0 0 24 24" fill="#FFC24F"
           style={{ left: `${50 + 52 * Math.cos((i / 5) * 6.283 - 1.2)}%`, top: `${48 + 52 * Math.sin((i / 5) * 6.283 - 1.2)}%` }}
-          animate={{ scale: [0, 1.2, 0.5, 1, 0], rotate: [0, 90, 180] }} transition={{ duration: 1.5, repeat: Infinity, delay: 0.3 + i * 0.22 }}>
+          animate={{ scale: [0, 1.2, 0.5, 1, 0], rotate: [0, 90, 180] }} transition={{ duration: 1.5, repeat: 2, delay: 0.3 + i * 0.22 }}>
           <path d="M12 0l3 9 9 3-9 3-3 9-3-9-9-3 9-3z" />
         </motion.svg>
       ))}
@@ -269,8 +270,9 @@ export function CelebrationLayer() {
   return (
     <AnimatePresence>
       {c && (
-        <motion.div key={c.id} className="celebrate" role="dialog" aria-live="polite" onClick={closeCurrent}
+        <motion.div key={c.id} className="celebrate" data-kind={c.kind} role="dialog" aria-live="polite" onClick={closeCurrent}
           initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0, transition: { duration: 0.3 } }}>
+          {!reduce && <><div className="celebrate-rays" />{[0, 1, 2].map((i) => <span key={i} className="celebrate-wave" style={{ animationDelay: `${0.12 + i * 0.2}s` }} />)}</>}
           {!reduce && <motion.div className="celebrate-glow" initial={{ scale: 0.4, opacity: 0 }} animate={{ scale: [0.4, 1.15, 1], opacity: [0, 0.9, 0.7] }} transition={{ duration: 1.1 }} />}
           <motion.div className="celebrate-card" initial={reduce ? { opacity: 0 } : ENTER[c.enter].initial} animate={{ scale: 1, y: 0, rotate: 0, opacity: 1 }} transition={reduce ? undefined : ENTER[c.enter].transition}>
             {!reduce && <motion.span className="celebrate-shine" initial={{ x: "-120%" }} animate={{ x: "220%" }} transition={{ duration: 0.9, delay: 0.55, ease: "easeInOut" }} />}
@@ -281,12 +283,8 @@ export function CelebrationLayer() {
               : c.hero === "cap" ? <CapHero />
               : c.hero === "trophy" ? <TrophyHero total={c.total} />
               : <div className="celebrate-hero"><motion.div animate={POSE[c.pose]}><Owl size={92} mood="happy" face={false} /></motion.div><Badge /></div>}
-            <motion.p className="celebrate-kicker" initial={{ opacity: 0, letterSpacing: "0.4em" }} animate={{ opacity: 1, letterSpacing: "0.16em" }} transition={{ delay: 0.3, duration: 0.5 }}>{c.kicker}</motion.p>
-            <AnimatePresence mode="wait">
-              <motion.p key={c.line} className="celebrate-line" initial={{ opacity: 0, y: 8, filter: "blur(5px)" }} animate={{ opacity: 1, y: 0, filter: "blur(0px)" }} exit={{ opacity: 0, y: -5 }} transition={{ duration: 0.3, delay: 0.1 }}>
-                {c.line}
-              </motion.p>
-            </AnimatePresence>
+            <p className="celebrate-kicker"><MaskText key={c.kicker} text={c.kicker} delay={0.35} step={0.08} /></p>
+            <p className="celebrate-line" key={c.line}><MaskText text={c.line} delay={c.id ? 0.5 : 0} step={0.05} /></p>
             {c.kind === "done" && c.title && <p className="meta truncate celebrate-sub"><Check size={13} strokeWidth={3} style={{ verticalAlign: -2 }} /> {c.title}</p>}
             {c.kind === "done" && (c.finished_today ?? 0) > 1 && <p className="meta celebrate-sub">{c.finished_today} learned today</p>}
           </motion.div>

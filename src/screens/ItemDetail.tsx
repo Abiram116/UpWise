@@ -12,6 +12,7 @@ import { getPref, setPref } from "../lib/store";
 import { startItem } from "../lib/startItem";
 import { useActiveSession, useSessionStore } from "../components/SessionBar";
 import { FormatIcon } from "../components/ItemCard";
+import { ItemThumb } from "../components/CoverArt";
 import { celebrateDone } from "../components/Celebrate";
 import { FinishSheet } from "../components/FinishSheet";
 import { Chip, Empty, ErrorState, Page, Pill, Rise, Sheet, Skeleton, Spinner, spring, useToast } from "../components/ui";
@@ -113,16 +114,16 @@ export function ItemDetailScreen() {
       <Rise>
         {embed ? (
           <div className="player"><iframe src={`https://www.youtube-nocookie.com/embed/${item.external_id}?rel=0&modestbranding=1`} title={item.title ?? ""} allow="accelerometer; autoplay; clipboard-write; encrypted-media; picture-in-picture" allowFullScreen /></div>
-        ) : item.thumbnail_url ? (
+        ) : (
           <motion.button className="thumb thumb-lg" data-format={format} layoutId={`thumb-${item.id}`} transition={spring} onClick={() => open(link)} style={{ position: "relative" }} whileTap={{ scale: 0.99 }}>
-            <img src={item.thumbnail_url} alt="" />
+            <ItemThumb item={item} />
             {isWatchable(format) && (
               <span style={{ position: "absolute", inset: 0, display: "grid", placeItems: "center" }}>
                 <span style={{ width: 64, height: 64, borderRadius: 999, background: "rgba(0,0,0,0.62)", display: "grid", placeItems: "center", color: "#fff" }}><Play size={26} fill="currentColor" /></span>
               </span>
             )}
           </motion.button>
-        ) : null}
+        )}
       </Rise>
 
       <Rise>
