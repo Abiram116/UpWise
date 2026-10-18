@@ -51,7 +51,7 @@ export function AppShell() {
       if (token) { if (seen.has(token)) return; seen.add(token); }
       if (target === "feed") nav("/feed");
       else if (target === "today") nav("/");
-      else if (target === "note" || target === "link") { nav("/"); setAddOpen(true); }
+      else if (target === "add" || target === "note" || target === "link") { nav("/"); setAddOpen(true); }
     };
     window.__upwiseGo = go;
     const pending = window.__upwisePendingGo;

@@ -2,8 +2,6 @@ import { useEffect, useMemo, useState } from "react";
 import { Bell, ChevronRight, Coffee, Download, Moon, Palette, RefreshCw, Target, User } from "lucide-react";
 import { useActivity, useProfile, useUpdateProfile, useItems, useSessions } from "../lib/api";
 import { loadOpens } from "../lib/slot";
-import { Owl, PERSONAS, useOwlPersona } from "../components/BrandMark";
-import { OwlPersonaSheet } from "../components/OwlPersona";
 import { ensurePermission, previewPlan, replanNotifications, settingsOf } from "../lib/notifications";
 import { describeError, isNetworkError } from "../lib/errors";
 import "../lib/android-bridge";
@@ -18,6 +16,14 @@ import type { Profile } from "../lib/types";
 import { useCoach } from "../lib/coach";
 import { Chip, ErrorState, Page, Pill, Rise, Segmented, Sheet, Skeleton, Switch, useToast } from "../components/ui";
 
+// What makes each kind of nudge go away by itself, so nothing on the list feels like it's forever.
+const STOPS: Record<string, string> = {
+  morning_plan: "Skipped once there's nothing left to learn",
+  resume: "Gone once you finish it",
+  stale: "Gone once you start, finish or skip it",
+  study_slot: "Skipped on days you've already hit your goal",
+  weekly_recap: "Sundays",
+};
 const when = (d: Date) => {
   const t = d.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" });
   const days = Math.round((new Date(d).setHours(0, 0, 0, 0) - new Date().setHours(0, 0, 0, 0)) / 86400e3);
@@ -39,14 +45,13 @@ export function SettingsScreen() {
   const [progress, setProgress] = useState<number | null>(null);
   const [goalOpen, setGoalOpen] = useState(false);
   const [breakOpen, setBreakOpen] = useState(false);
-  const [personaOpen, setPersonaOpen] = useState(false);
-  const persona = useOwlPersona();
   const [opens, setOpens] = useState<number[]>([]);
   useEffect(() => { void loadOpens().then(setOpens); }, []);
   const coming = useMemo(
     () => (profile.data && items.data && sessions.data ? previewPlan({ profile: profile.data, items: items.data, sessions: sessions.data, coach, activity: activity.data, opens }) : []),
     [profile.data, items.data, sessions.data, coach, activity.data, opens],
   );
+  const lastDaily = [...coming].reverse().find((n) => n.kind !== "weekly_recap")?.at;
   const [palette, setPaletteState] = useState<PaletteName>(currentPalette());
   const [theme, setTheme] = useState<Theme>((localStorage.getItem("upwise:theme") as Theme) || "system");
 
@@ -119,11 +124,6 @@ export function SettingsScreen() {
             <Segmented value={palette} onChange={(p) => { setPaletteState(p); applyPalette(p); }} options={[{ value: "wallpaper", label: "Wallpaper" }, { value: "upwise", label: "UpWise" }]} />
           </div>
         )}
-        <button className="setting" onClick={() => setPersonaOpen(true)}>
-          <span className="setting-icon"><Owl size={26} persona={persona} /></span>
-          <div className="grow"><div className="title-sm">Your owl</div><div className="meta">{PERSONAS.find((x) => x.id === persona)?.name} · {PERSONAS.find((x) => x.id === persona)?.tagline}</div></div>
-          <ChevronRight size={18} className="meta" />
-        </button>
         <button className="setting" onClick={() => setBreakOpen(true)}>
           <span className="setting-icon"><Coffee size={18} /></span>
           <div className="grow">
@@ -151,10 +151,14 @@ export function SettingsScreen() {
             {coming.slice(0, 5).map((n) => (
               <div key={n.id} className="row" style={{ gap: 12, minHeight: 44, alignItems: "flex-start", padding: "6px 4px" }}>
                 <span className="meta num" style={{ width: 92, flexShrink: 0, paddingTop: 1 }}>{when(n.at)}</span>
-                <div className="col" style={{ gap: 1 }}><span className="title-sm clamp-1">{n.title}</span><span className="meta clamp-2">{n.body}</span></div>
+                <div className="col" style={{ gap: 1 }}><span className="title-sm clamp-1">{n.title}</span><span className="meta clamp-2">{n.body}</span>{STOPS[n.kind] && <span className="meta" style={{ fontSize: 12, opacity: 0.75 }}>{STOPS[n.kind]}</span>}</div>
               </div>
             ))}
-            <p className="meta" style={{ paddingLeft: 4 }}>Scheduled on this device, 4 days ahead, refreshed every day you open the app.</p>
+            <p className="meta" style={{ paddingLeft: 4 }}>
+              Planned on this phone up to {when(lastDaily ?? coming[coming.length - 1].at)} and re-planned every time you open UpWise.
+              If you don't open it before then, they stop — apart from one Sunday recap.
+              Turning this off or taking a break stops them all straight away.
+            </p>
           </div>
         )}
       </Group>
@@ -170,7 +174,6 @@ export function SettingsScreen() {
         </button>
       </Group>
 
-      <OwlPersonaSheet open={personaOpen} onClose={() => setPersonaOpen(false)} />
       <Sheet open={breakOpen} onClose={() => setBreakOpen(false)} title={onBreak ? "On a break" : "Take a break"}>
         <BreakEditor
           settings={p?.settings ?? {}}

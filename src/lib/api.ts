@@ -3,7 +3,6 @@ import { currentUserId, supabase } from "./supabase";
 import { queryClient } from "./queryClient";
 import { analyzeLink, lean } from "./analyze";
 import { writeOrQueue } from "./outbox";
-import { owlPersona } from "../components/BrandMark";
 import { describeError } from "./errors";
 import { useToast } from "../components/ui";
 import type { Category, CoachResult, DailyActivity, Item, ItemStatus, LearningSession, Profile } from "./types";
@@ -271,13 +270,13 @@ export async function setItemStatus(itemId: string, status: ItemStatus): Promise
 }
 
 // ---------- coach ----------
-export async function fetchCoach(ctx: { previousPickId?: string | null; todayMinutes?: number; streak?: number; event?: string; recentLines?: string[]; persona?: string } = {}): Promise<CoachResult> {
+export async function fetchCoach(ctx: { previousPickId?: string | null; todayMinutes?: number; streak?: number; event?: string; recentLines?: string[]; sig?: string } = {}): Promise<CoachResult> {
   const now = new Date();
   const res = await supabase.functions.invoke("coach", {
     body: {
       local_hour: now.getHours(), weekday: now.toLocaleDateString("en", { weekday: "long" }),
       previous_pick_id: ctx.previousPickId ?? null, today_minutes: ctx.todayMinutes ?? null, streak: ctx.streak ?? null,
-      event: ctx.event ?? null, recent_lines: ctx.recentLines ?? [], persona: ctx.persona ?? null,
+      event: ctx.event ?? null, recent_lines: ctx.recentLines ?? [], sig: ctx.sig ?? null,
     },
   });
   if (res.error) throw res.error;
@@ -285,15 +284,6 @@ export async function fetchCoach(ctx: { previousPickId?: string | null; todayMin
 }
 
 export interface CheerEvent { kind: "done" | "goal" | "streak" | "cleared" | "shield"; title?: string; minutes?: number; streak?: number; finished_today?: number; /** Items learned in total, for milestone cards. */ total?: number; /** A light pop (confetti + haptic) with no card — for rapid learning in the feed. */ quiet?: boolean }
-
-/** One fresh celebration line — only if it arrives while the celebration is still on screen. */
-export async function fetchCheer(event: CheerEvent, recentLines: string[], timeoutMs = 2700): Promise<string | null> {
-  const now = new Date();
-  const call = supabase.functions.invoke("coach", {
-    body: { mode: "cheer", event, recent_lines: recentLines, persona: owlPersona.get(), local_hour: now.getHours(), weekday: now.toLocaleDateString("en", { weekday: "long" }) },
-  }).then((r) => (r.error ? null : ((r.data as { line?: string })?.line || null))).catch(() => null);
-  return Promise.race([call, new Promise<null>((r) => setTimeout(() => r(null), timeoutMs))]);
-}
 
 // ---------- notifications log (analytics only — never worth surfacing a failure) ----------
 export async function logNotification(entry: { item_id?: string | null; kind: string; title: string; body: string; scheduled_for?: string }) {

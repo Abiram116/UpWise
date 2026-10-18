@@ -9,12 +9,15 @@ import { ErrorBoundary } from "./components/ErrorBoundary";
 import { DAY_MS, queryClient } from "./lib/queryClient";
 import { initTheme } from "./theme";
 import { isDesktop } from "./lib/platform";
+import { syncNativeInsets } from "./lib/android-bridge";
 import "@fontsource-variable/figtree";
 import "./styles/tokens.css";
 import "./styles/base.css";
 import "./styles/components.css";
 
 initTheme();
+syncNativeInsets();
+document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible") syncNativeInsets(); });
 
 // The library, profile and stats survive restarts, so the app opens straight into your data
 // — even with no signal or a paused database — and refreshes in the background.

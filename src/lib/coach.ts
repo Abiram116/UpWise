@@ -4,7 +4,7 @@ import { fetchCoach } from "./api";
 import { getPref, setPref } from "./store";
 import { useConnection } from "./connection";
 import type { CoachResult, Item } from "./types";
-import { owlPersona, type OwlMood } from "../components/BrandMark";
+import type { OwlMood } from "../components/BrandMark";
 
 // The Today line reacts to your situation instead of a timer: it's regenerated only when
 // something meaningful changed (new part of the day, finished something, hit the goal, saved
@@ -27,7 +27,9 @@ let lastCallAt = 0;
 export const partOfDay = (h = new Date().getHours()) => (h < 5 ? "night" : h < 12 ? "morning" : h < 17 ? "afternoon" : h < 22 ? "evening" : "night");
 
 export function situationSig(c: CoachCtx): string {
-  return [new Date().toDateString(), partOfDay(), c.todayMinutes >= c.target ? 1 : 0, c.finishedToday, c.pendingCount].join("|");
+  // Saving things doesn't earn a new line (that alone was most of the calls) — only going from
+  // an empty list to a non-empty one does.
+  return [new Date().toDateString(), partOfDay(), c.todayMinutes >= c.target ? 1 : 0, c.finishedToday, c.pendingCount > 0 ? 1 : 0].join("|");
 }
 
 /** What changed since the line on screen was written — told to the model as "just happened". */
@@ -37,7 +39,7 @@ function eventBetween(prevSig: string | undefined, c: CoachCtx): string | undefi
   if (day !== new Date().toDateString()) return c.idleDays != null && c.idleDays >= 3 ? `came back after ${c.idleDays} days away` : "a new day started";
   if (goal === "0" && c.todayMinutes >= c.target) return "just hit today's goal";
   if (Number(finished) < c.finishedToday) return `just finished "${c.lastFinishedTitle ?? "something"}"`;
-  if (Number(pending) < c.pendingCount) return "just saved something new";
+  if (pending === "0" && c.pendingCount > 0) return "just saved something new";
   return undefined;
 }
 
@@ -92,7 +94,7 @@ export function useCoach(enabled: boolean, ctx?: CoachCtx, pendingIds?: Set<stri
       lastCallAt = Date.now();
       const c = await fetchCoach({
         previousPickId: newest?.pick_item_id, todayMinutes: ctx!.todayMinutes, streak: ctx!.streak,
-        event: eventBetween(newest?.sig, ctx!), recentLines: await recentLines(), persona: owlPersona.get(),
+        event: eventBetween(newest?.sig, ctx!), recentLines: await recentLines(), sig,
       });
       const withSig = { ...c, sig };
       if (c.line) await remember(c.line);

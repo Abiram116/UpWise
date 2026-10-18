@@ -119,6 +119,15 @@ Living backlog of things to build next. Nothing here is built yet — this is th
 - [x] **New icon.** Minimal owl — two eyes glancing up-right, apricot beak, on sage.
 - Next: Gemini Nano (ML Kit GenAI Prompt API) for instant offline cheer/Today lines once it can be tested on the device.
 
+### v1.3.0 — one owl, calmer feed, fewer AI calls
+
+- [x] **Cold-start intro** rebuilt as a short ident: eyes open in the dark, a camera snap with iris, rings and a haptic click, the wordmark slams in, then the screen lifts away. Plays only on a true cold start — launcher shortcuts no longer restart a running app (invisible trampoline activity).
+- [x] **Shortcuts** merged to Add / Scroll / Today.
+- [x] **Scroll feed**: no React work mid-swipe (the window of real cards moves on scrollend), neighbours preloaded, tabs never wrap, counter updated in place. Native safe-area insets are cached and re-applied on boot/resume.
+- [x] **One owl**: personalities and the picker removed. Real eyelids, natural blink timing (blinks on glances, the odd double), snappier gaze, no body spin.
+- [x] **Notifications**: "Coming up" says what makes each one go away and when planning ends.
+- [x] **Fewer AI calls**: celebration lines come from a database-backed bank refilled 12 at a time; the Today line is cached per situation and no longer regenerates on every save.
+
 ### v1.2.0 — motion graphics, performance, cover art
 
 - [x] **Cinematic launch**: light-sweep + drifting particle field, owl assembling under a slow camera push-in, eyes igniting with a bloom, pupils darting, beak spark-burst, masked kinetic wordmark with a drawn rule, then an iris closing onto the owl to reveal the already-booted app.

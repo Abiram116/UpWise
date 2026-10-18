@@ -41,6 +41,16 @@ class MainActivity : TauriActivity() {
   private var pendingGo: String? = null
   private var pendingDownloadId: Long = -1
   private val handler = Handler(Looper.getMainLooper())
+  private var safeTop = 0f
+  private var safeBottom = 0f
+  private var keyboardInset = 0f
+
+  private fun insetsJs() =
+    "(function(s){s.setProperty('--native-safe-top','${safeTop}px');" +
+      "s.setProperty('--native-safe-bottom','${safeBottom}px');" +
+      "s.setProperty('--native-keyboard-inset','${keyboardInset}px');})(document.documentElement.style);"
+
+  private fun pushInsets() { webView?.evaluateJavascript(insetsJs(), null) }
 
   private val downloadReceiver = object : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
@@ -92,17 +102,16 @@ class MainActivity : TauriActivity() {
       }
     })
 
+    // Bars are measured ignoring their momentary visibility, so a transient hide can't shrink the
+    // layout (the nav bar "dropping"). Values are cached here: the page also pulls them on boot and
+    // on resume (insets() below), so a reload that misses a push can never leave them unset.
     ViewCompat.setOnApplyWindowInsetsListener(window.decorView) { _, insets ->
       val density = resources.displayMetrics.density
-      val statusBar = insets.getInsets(WindowInsetsCompat.Type.statusBars()).top / density
-      val navBar = insets.getInsets(WindowInsetsCompat.Type.navigationBars()).bottom / density
-      val keyboard = insets.getInsets(WindowInsetsCompat.Type.ime()).bottom / density
-      webView?.evaluateJavascript(
-        "document.documentElement.style.setProperty('--native-safe-top','${statusBar}px');" +
-          "document.documentElement.style.setProperty('--native-safe-bottom','${navBar}px');" +
-          "document.documentElement.style.setProperty('--native-keyboard-inset','${keyboard}px');",
-        null,
-      )
+      val bars = insets.getInsetsIgnoringVisibility(WindowInsetsCompat.Type.systemBars())
+      safeTop = bars.top / density
+      safeBottom = bars.bottom / density
+      keyboardInset = insets.getInsets(WindowInsetsCompat.Type.ime()).bottom / density
+      pushInsets()
       insets
     }
   }
@@ -133,6 +142,10 @@ class MainActivity : TauriActivity() {
   }
 
   private inner class NativeBridge {
+    /** Current system-bar insets in CSS px, for the page to apply itself on boot/resume. */
+    @JavascriptInterface
+    fun insets(): String = "{\"top\":$safeTop,\"bottom\":$safeBottom,\"keyboard\":$keyboardInset}"
+
     @JavascriptInterface
     fun setLightStatusBar(light: Boolean) {
       handler.post {

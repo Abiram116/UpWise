@@ -15,7 +15,6 @@ import type { Item } from "../lib/types";
 import { ItemRow, FormatIcon } from "../components/ItemCard";
 import { Owl } from "../components/BrandMark";
 import { StreakSheet } from "../components/StreakSheet";
-import { OwlPersonaSheet } from "../components/OwlPersona";
 import { MaskText } from "../components/MaskText";
 import { ItemThumb } from "../components/CoverArt";
 import { useStreak } from "../lib/useStreak";
@@ -46,7 +45,6 @@ export function HomeScreen() {
   const streakInfo = useStreak();
   const st = streakInfo?.current ?? 0;
   const [streakOpen, setStreakOpen] = useState(false);
-  const [personaOpen, setPersonaOpen] = useState(false);
 
   const ctx: CoachCtx | undefined = useMemo(() => {
     if (!items.data || !activity.data) return undefined;
@@ -91,7 +89,7 @@ export function HomeScreen() {
       <header className="col" style={{ gap: 18 }}>
         <div className="row between">
           <motion.div className="owl-btn" initial={{ y: 28, opacity: 0, scale: 0.8 }} animate={{ y: 0, opacity: 1, scale: 1 }} transition={{ type: "spring", stiffness: 360, damping: 18, delay: 0.12 }} role="button" aria-label={hasNext ? "Hear the owl's new thought" : "Your owl"}>
-            <Owl size={58} alive interactive onLongPress={() => setPersonaOpen(true)} onTap={() => { if (hasNext) reveal(); }} mood={owlMoodFor(ctx, { loading, onBreak })}
+            <Owl size={58} alive interactive onTap={() => { if (hasNext) reveal(); }} mood={owlMoodFor(ctx, { loading, onBreak })}
               speakKey={line} speakMs={Math.min(2600, 700 + line.length * 38)} />
             {hasNext && <span className="owl-dot" />}
           </motion.div>
@@ -153,7 +151,6 @@ export function HomeScreen() {
           <Rise><p className="body-lg" style={{ color: "var(--on-surface-2)" }}>Share a video, reel or article to UpWise from any app — or tap + to paste a link.</p></Rise>
         )}
 
-      <OwlPersonaSheet open={personaOpen} onClose={() => setPersonaOpen(false)} />
       {streakInfo && <StreakSheet open={streakOpen} onClose={() => setStreakOpen(false)} s={streakInfo} />}
       {continuing.length > 0 && <Section title="Continue" items={continuing} />}
       {recent.length > 0 && <Section title="Recently saved" items={recent} more={pending.length > 5 ? () => nav("/library") : undefined} />}

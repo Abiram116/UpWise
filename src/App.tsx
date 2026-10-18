@@ -8,7 +8,7 @@ import { isTauri } from "./lib/platform";
 import { getPref, setPref } from "./lib/store";
 import { flushOutbox } from "./lib/outbox";
 import { loadOpens, recordOpen } from "./lib/slot";
-import { owlPersona } from "./components/BrandMark";
+import { syncLineBank } from "./lib/lineBank";
 import { Splash } from "./components/Splash";
 import { useReducedMotion } from "motion/react";
 import { connection } from "./lib/connection";
@@ -58,10 +58,10 @@ function Gate() {
   const { loading } = useAuth();
   const reduce = useReducedMotion();
   const [minDone, setMinDone] = useState(reduce === true);
-  useEffect(() => { if (minDone) return; const t = window.setTimeout(() => setMinDone(true), 1250); return () => window.clearTimeout(t); }, [minDone]);
+  useEffect(() => { if (minDone) return; const t = window.setTimeout(() => setMinDone(true), 1500); return () => window.clearTimeout(t); }, [minDone]);
   const ready = !loading && minDone;
   const [overlay, setOverlay] = useState(true);
-  useEffect(() => { if (!ready) return; const t = window.setTimeout(() => setOverlay(false), reduce ? 0 : 780); return () => window.clearTimeout(t); }, [ready, reduce]);
+  useEffect(() => { if (!ready) return; const t = window.setTimeout(() => setOverlay(false), reduce ? 200 : 640); return () => window.clearTimeout(t); }, [ready, reduce]);
   return <>{!loading && <GateInner />}{overlay && <Splash leaving={ready} />}</>;
 }
 
@@ -146,13 +146,11 @@ function Background() {
     // On reconnect, pull fresh data as well — anything on screen may be days old.
     return connection.onReconnect(() => { void flush(); void qc.invalidateQueries(); });
   }, [qc, toast]);
-  // The owl you picked follows you across devices: profile → the on-device store.
-  const pickedOwl = profile.data?.settings.owl_persona;
-  useEffect(() => { if (pickedOwl) owlPersona.set(pickedOwl); }, [pickedOwl]);
   // Every time the app comes to the foreground, that hour votes for being "a free moment" —
   // the study slot is learned from these plus real sessions.
   useEffect(() => {
     void recordOpen();
+    window.setTimeout(() => void syncLineBank(), 4000); // off the launch path
     const onShow = () => { if (document.visibilityState === "visible") void recordOpen(); };
     document.addEventListener("visibilitychange", onShow);
     return () => document.removeEventListener("visibilitychange", onShow);

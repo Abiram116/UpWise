@@ -1,16 +1,14 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Long-press the launcher icon: jump straight to a place in the app. -->
+<!-- Long-press the launcher icon: jump straight to a place in the app. Routed through
+     ShortcutActivity so an already-running app is resumed, not restarted. -->
 <shortcuts xmlns:android="http://schemas.android.com/apk/res/android">
+    <shortcut android:shortcutId="add" android:enabled="true" android:icon="@drawable/ic_sc_add" android:shortcutShortLabel="@string/sc_add_short" android:shortcutLongLabel="@string/sc_add_long">
+        <intent android:action="android.intent.action.VIEW" android:data="upwise://add" android:targetPackage="com.abiram.upwise" android:targetClass="com.abiram.upwise.ShortcutActivity" />
+    </shortcut>
     <shortcut android:shortcutId="scroll" android:enabled="true" android:icon="@drawable/ic_sc_scroll" android:shortcutShortLabel="@string/sc_scroll_short" android:shortcutLongLabel="@string/sc_scroll_long">
-        <intent android:action="android.intent.action.VIEW" android:data="upwise://feed" android:targetPackage="com.abiram.upwise" android:targetClass="com.abiram.upwise.MainActivity" />
-    </shortcut>
-    <shortcut android:shortcutId="note" android:enabled="true" android:icon="@drawable/ic_sc_note" android:shortcutShortLabel="@string/sc_note_short" android:shortcutLongLabel="@string/sc_note_long">
-        <intent android:action="android.intent.action.VIEW" android:data="upwise://note" android:targetPackage="com.abiram.upwise" android:targetClass="com.abiram.upwise.MainActivity" />
-    </shortcut>
-    <shortcut android:shortcutId="link" android:enabled="true" android:icon="@drawable/ic_sc_link" android:shortcutShortLabel="@string/sc_link_short" android:shortcutLongLabel="@string/sc_link_long">
-        <intent android:action="android.intent.action.VIEW" android:data="upwise://link" android:targetPackage="com.abiram.upwise" android:targetClass="com.abiram.upwise.MainActivity" />
+        <intent android:action="android.intent.action.VIEW" android:data="upwise://feed" android:targetPackage="com.abiram.upwise" android:targetClass="com.abiram.upwise.ShortcutActivity" />
     </shortcut>
     <shortcut android:shortcutId="today" android:enabled="true" android:icon="@drawable/ic_sc_today" android:shortcutShortLabel="@string/sc_today_short" android:shortcutLongLabel="@string/sc_today_long">
-        <intent android:action="android.intent.action.VIEW" android:data="upwise://today" android:targetPackage="com.abiram.upwise" android:targetClass="com.abiram.upwise.MainActivity" />
+        <intent android:action="android.intent.action.VIEW" android:data="upwise://today" android:targetPackage="com.abiram.upwise" android:targetClass="com.abiram.upwise.ShortcutActivity" />
     </shortcut>
 </shortcuts>

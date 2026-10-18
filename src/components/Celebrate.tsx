@@ -1,7 +1,8 @@
 import { useEffect, useState, useSyncExternalStore } from "react";
 import { AnimatePresence, motion, useReducedMotion, type TargetAndTransition } from "motion/react";
 import { Check } from "lucide-react";
-import { fetchCheer, type CheerEvent } from "../lib/api";
+import type { CheerEvent } from "../lib/api";
+import { takeLine } from "../lib/lineBank";
 import { recentLines, remember } from "../lib/coach";
 import { confetti, stopConfetti, type Pattern } from "../lib/confetti";
 import { haptic } from "../lib/haptics";
@@ -72,7 +73,8 @@ async function show(e: CheerEvent) {
   const milestone = e.kind === "done" && e.total ? MILESTONE[e.total] : undefined;
   const pool = [...LINES[e.kind], ...(e.kind === "done" || e.kind === "goal" ? (hour >= 23 || hour < 4 ? LATE : hour < 6 ? EARLY : []) : [])].map((l) => fill(l, e));
   const unsaid = pool.filter((l) => !recent.includes(l));
-  const line = milestone ?? pickOne(unsaid.length ? unsaid : pool);
+  // A banked AI-written line when there is one (instant, no network), else a built-in one.
+  const line = milestone ?? (e.kind !== "shield" ? takeLine(e, recent) : null) ?? pickOne(unsaid.length ? unsaid : pool);
   const pattern = fresh(PATTERNS[e.kind], last.pattern);
   const enter = fresh<Enter>(["pop", "drop", "swing"], last.enter);
   const pose = fresh<Pose>(["hop", "spin", "tilt"], last.pose);
@@ -84,10 +86,7 @@ async function show(e: CheerEvent) {
   emit();
   if (e.kind === "done") haptic.celebrate(); else haptic.spin();
   confetti(pattern, e.kind === "done" ? 0.9 : 1.2);
-  const id = current.id;
-  const ai = e.kind === "shield" ? null : await fetchCheer(e, recent);
-  if (ai && current?.id === id && !milestone) { current = { ...current, line: ai }; emit(); }
-  void remember(ai && !milestone ? ai : line);
+  void remember(line);
 }
 
 function closeCurrent() {

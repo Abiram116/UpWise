@@ -1,109 +1,123 @@
-import { useEffect, useMemo, useRef } from "react";
+import { useEffect, useMemo } from "react";
 import { motion, useReducedMotion } from "motion/react";
 import { BEAK, BEAK_LOW, BEAK_SHINE, C, EYES, EY, HEAD, PR, R } from "./BrandMark";
+import { haptic } from "../lib/haptics";
 
-// Launch sequence (~1.25s), built like a title card:
-//   0.00  a drifting field of light motes fades in; a diagonal light-sweep crosses the frame
-//   0.00  the squircle springs in, the head rises, a slow camera push-in begins
-//   0.28  eyes pop (spring overshoot) and ignite — a bloom flashes behind them
-//   0.50  pupils dart left, right, centre; the beak pops with a burst of sparks
-//   0.62  wordmark letters slide up out of their masks; an amber rule draws underneath
-//   1.00  one blink
-//   exit  an iris closes onto the owl, revealing the app already waiting underneath
-// Everything is transforms/opacity except the one-off clip-path iris and a ~50-particle canvas
-// that runs only while the splash is up, so it's cheap even at 120 Hz.
-const spring = (delay: number, stiffness = 320, damping = 13) => ({ type: "spring" as const, stiffness, damping, delay });
+// Cold-start intro (~1.5s + a 0.6s exit), cut like a channel ident:
+//   0.00  darkness. Two eyes open (real upper lids lifting), glowing, huge in frame
+//   0.30  they glance left, right — then look up at you
+//   0.58  SNAP: the camera slams back, the owl irises open around the eyes, a flash,
+//         shockwave rings and a spark burst, and a haptic click in your hand
+//   0.78  the wordmark slams in letter by letter, tracking tightening; a rule draws under it
+//   1.20  one natural blink
+//   exit  a curtain lifts up off the screen (Up-Wise), revealing the app already waiting
+// Transforms/opacity plus one SVG clip; nothing runs once it's gone.
+const SNAP = 0.58;
+const D = 1.5; // length of the eye timeline (lids + pupils)
 const WORD = "UpWise".split("");
+const EXPO = [0.16, 1, 0.3, 1] as const;
 
-function Motes() {
-  const ref = useRef<HTMLCanvasElement>(null);
-  useEffect(() => {
-    const cv = ref.current; if (!cv) return;
-    const ctx = cv.getContext("2d"); if (!ctx) return;
-    const dpr = Math.min(window.devicePixelRatio || 1, 1.5);
-    const W = window.innerWidth, H = window.innerHeight;
-    cv.width = W * dpr; cv.height = H * dpr; ctx.scale(dpr, dpr);
-    const motes = Array.from({ length: 52 }, () => ({ x: Math.random() * W, y: H * (0.4 + Math.random() * 0.8), r: 0.8 + Math.random() * 2.2, v: 14 + Math.random() * 40, p: Math.random() * 6.28, hue: Math.random() < 0.7 ? "82, 204, 146" : "255, 194, 79" }));
-    let last = performance.now(), raf = 0, t = 0;
-    const frame = (now: number) => {
-      const dt = Math.min(0.05, (now - last) / 1000); last = now; t += dt;
-      ctx.clearRect(0, 0, W, H);
-      ctx.globalCompositeOperation = "lighter";
-      const fade = Math.min(1, t / 0.5);
-      for (const m of motes) {
-        m.y -= m.v * dt; m.x += Math.sin(t * 0.8 + m.p) * 6 * dt;
-        if (m.y < -10) { m.y = H + 10; m.x = Math.random() * W; }
-        const a = (0.25 + 0.35 * Math.sin(t * 2 + m.p)) * fade;
-        const g = ctx.createRadialGradient(m.x, m.y, 0, m.x, m.y, m.r * 5);
-        g.addColorStop(0, `rgba(${m.hue}, ${Math.max(0, a)})`); g.addColorStop(1, `rgba(${m.hue}, 0)`);
-        ctx.fillStyle = g; ctx.beginPath(); ctx.arc(m.x, m.y, m.r * 5, 0, 6.283); ctx.fill();
-      }
-      raf = requestAnimationFrame(frame);
-    };
-    raf = requestAnimationFrame(frame);
-    return () => cancelAnimationFrame(raf);
-  }, []);
-  return <canvas ref={ref} className="splash-motes" />;
-}
+// Upper eyelid: an ellipse clip rising from below the eye reveals it with a curved lid edge;
+// sliding it back down is a blink (fast close, a hair of hold, slower open — like a real one).
+const LID_RY = R * 1.4, LID_RX = R * 1.6;
+const OPEN = EY + R * 0.35, SHUT = EY + R + LID_RY + 6;
+const at = (t: number) => t / D;
+const LID = {
+  cy: [SHUT, SHUT, OPEN, OPEN, SHUT, SHUT, OPEN],
+  times: [0, at(0.06), at(0.4), at(1.2), at(1.27), at(1.3), at(1.45)],
+  ease: ["linear", [0.2, 0.7, 0.3, 1], "linear", [0.5, 0, 0.9, 0.6], "linear", [0.2, 0.8, 0.4, 1]],
+};
+const PUPIL = {
+  x: [0, 0, -38, -38, 36, 36, 22],
+  y: [0, 0, 8, 8, 6, 6, -24],
+  times: [0, at(0.3), at(0.36), at(0.46), at(0.52), at(0.6), at(0.72)],
+};
 
 export function Splash({ leaving = false }: { leaving?: boolean }) {
-  const reduce = useReducedMotion();
-  const sparks = useMemo(() => Array.from({ length: 12 }, (_, i) => {
-    const a = (i / 12) * Math.PI * 2 + Math.random() * 0.4, d = 260 + Math.random() * 180;
-    return { x: Math.cos(a) * d, y: Math.sin(a) * d - 40, s: 10 + Math.random() * 14, c: ["#FFC24F", "#FFE08A", "#52CC92", "#FFF7E8"][i % 4] };
+  const reduce = useReducedMotion() === true;
+  useEffect(() => {
+    if (reduce) return;
+    const t = window.setTimeout(() => haptic.tap(), SNAP * 1000);
+    return () => window.clearTimeout(t);
+  }, [reduce]);
+  const sparks = useMemo(() => Array.from({ length: 14 }, (_, i) => {
+    const a = (i / 14) * Math.PI * 2 + (Math.random() - 0.5) * 0.35, d = 120 + Math.random() * 110;
+    return { x: Math.cos(a) * d, y: Math.sin(a) * d, s: 4 + Math.random() * 6, c: ["#FFC24F", "#52CC92", "#FFF7E8"][i % 3], k: Math.random() * 0.08 };
   }), []);
+
+  const s = (delay: number) => ({ delay: reduce ? 0 : delay });
   return (
-    <motion.div className="splash" role="img" aria-label="UpWise"
-      initial={{ clipPath: "circle(150% at 50% 42%)" }}
-      animate={{ clipPath: leaving && !reduce ? "circle(0% at 50% 42%)" : "circle(150% at 50% 42%)" }}
-      transition={leaving ? { duration: 0.72, ease: [0.7, 0, 0.2, 1] } : { duration: 0 }}>
-      {!reduce && <Motes />}
-      <div className="splash-vignette" />
-      {!reduce && <motion.div className="splash-sweep" initial={{ x: "-140%" }} animate={{ x: "140%" }} transition={{ duration: 1.15, delay: 0.12, ease: [0.4, 0, 0.2, 1] }} />}
-      <motion.div className="splash-glow" initial={{ scale: 0.3, opacity: 0 }} animate={{ scale: [0.3, 1.1, 1], opacity: [0, 0.9, 0.6] }} transition={{ duration: 1.3, delay: reduce ? 0 : 0.1 }} />
-      <motion.div className="splash-camera" initial={{ scale: 1 }} animate={{ scale: reduce ? 1 : 1.07 }} transition={{ duration: 1.9, ease: "easeOut" }}>
-        <div style={{ position: "relative", width: 168, height: 168 }}>
-          <motion.svg width="168" height="168" viewBox="0 0 1024 1024" style={{ overflow: "visible", position: "relative" }}>
-            <defs>
-              <linearGradient id="spbg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stopColor={C.bg0} /><stop offset="1" stopColor={C.bg1} /></linearGradient>
-              <linearGradient id="spbk" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stopColor={C.beak0} /><stop offset="1" stopColor={C.beak1} /></linearGradient>
-            </defs>
-            <motion.rect width="1024" height="1024" rx="232" fill="url(#spbg)" style={{ transformOrigin: "512px 512px" }}
-              initial={reduce ? false : { scale: 0.5, opacity: 0, rotate: -12 }} animate={{ scale: 1, opacity: 1, rotate: 0 }} transition={spring(0, 240, 15)} />
-            <motion.path d={HEAD} fill={C.head} fillOpacity=".55" stroke={C.head} strokeOpacity=".55" strokeWidth="26" strokeLinejoin="round" style={{ transformOrigin: "512px 800px" }}
-              initial={reduce ? false : { scaleY: 0.35, opacity: 0 }} animate={{ scaleY: 1, opacity: 1 }} transition={spring(0.12, 260, 14)} />
-            <motion.g animate={reduce ? undefined : { scaleY: [1, 1, 0.08, 1] }} transition={{ duration: 0.3, delay: 1.0, times: [0, 0.2, 0.55, 1] }} style={{ transformOrigin: `512px ${EY}px` }}>
-              {EYES.map((x, i) => (
-                <motion.g key={x} style={{ transformOrigin: `${x}px ${EY}px` }} initial={reduce ? false : { scale: 0 }} animate={{ scale: 1 }} transition={spring(0.28 + i * 0.07, 380, 11)}>
-                  <circle cx={x} cy={EY} r={R + 10} fill="#0F4A35" opacity=".35" />
-                  <circle cx={x} cy={EY} r={R} fill={C.cream} />
-                  <motion.g initial={reduce ? false : { scale: 0, x: 0, y: 0 }} animate={reduce ? { scale: 1, x: 26, y: -26 } : { scale: 1, x: [0, -34, 36, 26], y: [0, 14, -8, -26] }}
-                    style={{ transformOrigin: `${x}px ${EY}px` }} transition={{ scale: spring(0.5, 420, 12), x: { duration: 0.8, delay: 0.62, times: [0, 0.3, 0.7, 1] }, y: { duration: 0.8, delay: 0.62, times: [0, 0.3, 0.7, 1] } }}>
-                    <circle cx={x} cy={EY} r={PR} fill={C.pupil} />
-                    <circle cx={x - 22} cy={EY - 24} r="20" fill={C.cream} />
-                    <circle cx={x + 22} cy={EY + 20} r="8" fill={C.cream} opacity=".85" />
-                  </motion.g>
-                </motion.g>
+    <motion.div className="intro" role="img" aria-label="UpWise"
+      initial={{ clipPath: "inset(0% 0% 0% 0% round 0px)" }}
+      animate={{ clipPath: leaving ? (reduce ? "inset(0% 0% 0% 0% round 0px)" : "inset(0% 0% 100% 0% round 0px 0px 48px 48px)") : "inset(0% 0% 0% 0% round 0px)", opacity: leaving && reduce ? 0 : 1 }}
+      transition={leaving ? { duration: reduce ? 0.2 : 0.62, ease: [0.76, 0, 0.24, 1] } : { duration: 0 }}>
+      {!reduce && <motion.div className="intro-flash" initial={{ opacity: 0 }} animate={{ opacity: [0, 0.55, 0] }} transition={{ duration: 0.34, delay: SNAP, times: [0, 0.15, 1] }} />}
+      <motion.div className="intro-stage" animate={leaving && !reduce ? { y: -70, opacity: 0 } : { y: 0, opacity: 1 }} transition={{ duration: 0.45, ease: [0.5, 0, 0.75, 0] }}>
+        <div className="intro-mark">
+          {!reduce && [0, 1, 2].map((i) => (
+            <motion.div key={i} className="intro-ring" data-i={i} initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: [0.9, 2.5 + i * 0.5], opacity: [0, 0.9, 0] }}
+              transition={{ duration: 0.8 + i * 0.12, delay: SNAP + 0.06 + i * 0.07, ease: EXPO, times: [0, 0.12, 1] }} />
+          ))}
+          {!reduce && sparks.map((p, i) => (
+            <motion.i key={i} className="intro-spark" style={{ width: p.s, height: p.s, background: p.c }} initial={{ x: 0, y: 0, scale: 0, opacity: 0 }}
+              animate={{ x: p.x, y: p.y, scale: [0, 1, 0.3], opacity: [0, 1, 0] }} transition={{ duration: 0.7, delay: SNAP + 0.08 + p.k, ease: EXPO }} />
+          ))}
+          {/* the camera: starts pushed in tight on the eyes, then snaps back */}
+          <motion.div className="intro-camera" initial={reduce ? false : { scale: 3.2, y: 34 }} animate={{ scale: 1, y: 0 }}
+            transition={{ duration: 0.62, delay: SNAP, ease: EXPO }}>
+            <svg width="168" height="168" viewBox="0 0 1024 1024" style={{ overflow: "visible", display: "block" }}>
+              <defs>
+                <linearGradient id="inbg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stopColor={C.bg0} /><stop offset="1" stopColor={C.bg1} /></linearGradient>
+                <linearGradient id="inbk" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stopColor={C.beak0} /><stop offset="1" stopColor={C.beak1} /></linearGradient>
+                <radialGradient id="inglow"><stop offset="0.55" stopColor="#FFE9B8" stopOpacity="0.55" /><stop offset="1" stopColor="#FFE9B8" stopOpacity="0" /></radialGradient>
+                {/* the body irises open from the eyes outward at the snap */}
+                <clipPath id="iniris"><motion.circle cx="512" cy={EY} initial={{ r: reduce ? 900 : 0 }} animate={{ r: 900 }} transition={{ duration: 0.55, delay: SNAP, ease: EXPO }} /></clipPath>
+                {EYES.map((x, i) => (
+                  <clipPath id={`inlid${i}`} key={x}>
+                    <motion.ellipse cx={x} rx={LID_RX} ry={LID_RY} initial={{ cy: reduce ? OPEN : SHUT }}
+                      animate={reduce ? { cy: OPEN } : { cy: LID.cy }} transition={{ duration: D, times: LID.times, ease: LID.ease as never, delay: i * 0.02 }} />
+                  </clipPath>
+                ))}
+              </defs>
+              <g clipPath="url(#iniris)">
+                <rect width="1024" height="1024" rx="232" fill="url(#inbg)" />
+                <path d={HEAD} fill={C.head} fillOpacity=".55" stroke={C.head} strokeOpacity=".55" strokeWidth="26" strokeLinejoin="round" />
+              </g>
+              {/* in the dark, the eyes glow; the glow dies as the light comes up */}
+              {!reduce && EYES.map((x) => (
+                <motion.circle key={x} cx={x} cy={EY} r={R * 1.9} fill="url(#inglow)" initial={{ opacity: 0 }} animate={{ opacity: [0, 1, 1, 0] }}
+                  transition={{ duration: SNAP + 0.3, times: [0, 0.35, 0.66, 1] }} />
               ))}
-            </motion.g>
-            <motion.g style={{ transformOrigin: "512px 572px" }} initial={reduce ? false : { scale: 0, rotate: -20 }} animate={{ scale: 1, rotate: 0 }} transition={spring(0.5, 520, 10)}>
-              <path d={BEAK} fill="url(#spbk)" /><path d={BEAK_LOW} fill={C.beak1} opacity=".55" /><path d={BEAK_SHINE} fill={C.shine} opacity=".9" />
-            </motion.g>
-            {!reduce && sparks.map((s, i) => (
-              <motion.circle key={i} cx="512" cy="640" r={s.s} fill={s.c} initial={{ x: 0, y: 0, opacity: 0, scale: 0 }} animate={{ x: s.x, y: s.y, opacity: [0, 1, 0], scale: [0, 1, 0.4] }} transition={{ duration: 0.95, delay: 0.55, ease: [0.1, 0.7, 0.2, 1] }} />
-            ))}
-          </motion.svg>
-          {/* the eyes ignite: a bloom flares behind them as they pop open */}
-          {!reduce && <motion.div className="splash-bloom" initial={{ scale: 0, opacity: 0 }} animate={{ scale: [0, 1.5, 1.9], opacity: [0, 0.95, 0] }} transition={{ duration: 0.8, delay: 0.38, ease: "easeOut" }} />}
+              {EYES.map((x, i) => (
+                <g key={x}>
+                  <circle cx={x} cy={EY} r={R + 10} fill="#0F4A35" opacity=".35" clipPath="url(#iniris)" />
+                  <g clipPath={`url(#inlid${i})`}>
+                    <circle cx={x} cy={EY} r={R} fill={C.cream} />
+                    <motion.g initial={reduce ? { x: 22, y: -24 } : { x: 0, y: 0 }} animate={reduce ? { x: 22, y: -24 } : { x: PUPIL.x, y: PUPIL.y }}
+                      transition={{ duration: D, times: PUPIL.times, ease: "easeInOut" }}>
+                      <circle cx={x} cy={EY} r={PR} fill={C.pupil} />
+                      <circle cx={x - 22} cy={EY - 24} r="20" fill={C.cream} />
+                      <circle cx={x + 22} cy={EY + 20} r="8" fill={C.cream} opacity=".85" />
+                    </motion.g>
+                  </g>
+                </g>
+              ))}
+              <motion.g style={{ transformOrigin: "512px 600px" }} initial={reduce ? false : { scale: 0, y: 40 }} animate={{ scale: 1, y: 0 }}
+                transition={{ type: "spring", stiffness: 520, damping: 14, delay: SNAP + 0.14 }}>
+                <path d={BEAK} fill="url(#inbk)" /><path d={BEAK_LOW} fill={C.beak1} opacity=".55" /><path d={BEAK_SHINE} fill={C.shine} opacity=".9" />
+              </motion.g>
+            </svg>
+          </motion.div>
         </div>
-        <div className="splash-word" aria-hidden>
+        <motion.div className="intro-word" aria-hidden initial={reduce ? false : { letterSpacing: "0.32em" }} animate={{ letterSpacing: "-0.03em" }}
+          transition={{ duration: 0.7, ...s(SNAP + 0.2), ease: EXPO }}>
           {WORD.map((ch, i) => (
             <span key={i} className="mask-word" style={{ margin: 0, padding: "0.08em 0.012em 0.18em" }}>
-              <span className="mask-in" style={{ animationDelay: reduce ? "0s" : `${0.64 + i * 0.06}s` }}>{ch}</span>
+              <span className={`mask-in${i < 2 ? " intro-up" : ""}`} style={{ animationDelay: reduce ? "0s" : `${SNAP + 0.2 + i * 0.045}s` }}>{ch}</span>
             </span>
           ))}
-        </div>
-        <motion.div className="splash-rule" initial={{ scaleX: 0 }} animate={{ scaleX: 1 }} transition={{ duration: 0.55, delay: reduce ? 0 : 1.0, ease: [0.2, 0.8, 0.2, 1] }} />
+        </motion.div>
+        <motion.div className="intro-rule" initial={{ scaleX: 0 }} animate={{ scaleX: 1 }} transition={{ duration: 0.5, ...s(SNAP + 0.48), ease: EXPO }} />
       </motion.div>
     </motion.div>
   );

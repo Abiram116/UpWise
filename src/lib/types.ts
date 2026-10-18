@@ -72,7 +72,6 @@ export interface Profile {
     break_reason?: string | null;
     /** Earlier breaks, so their days stay streak-neutral after a newer one begins. */
     break_log?: { from: string; to: string }[];
-    owl_persona?: "classic" | "scholar" | "chill" | "hype" | "sassy"; // which owl you picked
     weekly_recap?: boolean;
     warn_duplicates?: boolean; // default true — flag likely-duplicate saves at save-time
   };

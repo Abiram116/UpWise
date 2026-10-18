@@ -46,6 +46,8 @@ export function FeedScreen() {
   const start = useSessionStore((s) => s.start);
   const scroller = useRef<HTMLDivElement>(null);
   const raf = useRef(0);
+  const settle = useRef(0);
+  const counter = useRef<HTMLSpanElement>(null);
   const activeRef = useRef(0);
   const [active, setActive] = useState(0);
   const [mode, setMode] = useState<Mode>("all");
@@ -61,7 +63,6 @@ export function FeedScreen() {
   const saved = useMemo(() => (items.data ?? []).filter((i) => i.status === "saved" && formatOf(i) !== "note").sort((a, b) => b.created_at.localeCompare(a.created_at)), [items.data]);
   const noQuick = mode === "quick" && quick.length === 0 && all.length > 0;
   const list = mode === "saved" ? saved : mode === "quick" && !noQuick ? quick : all;
-  const counts: Record<Mode, number> = { all: all.length, quick: quick.length, saved: saved.length };
 
   const ctx: CoachCtx | undefined = useMemo(() => {
     if (!items.data || !activity.data) return undefined;
@@ -75,17 +76,37 @@ export function FeedScreen() {
 
   const pickMode = (m: Mode) => { setMode(m); void setPref("feedMode", m); scroller.current?.scrollTo({ top: 0 }); activeRef.current = 0; setActive(0); };
 
-  // Which card is on screen: drives the counter and a soft tick every time one snaps into place.
+  // Nothing React-y happens mid-swipe: the counter is written straight to the DOM, and the
+  // window of real cards only moves once the snap has landed (scrollend, or a short quiet
+  // timer where scrollend isn't supported) — so no mounting or image decoding during the
+  // gesture, which is what caused the mid-scroll hitch. The tick fires as the card lands.
+  const land = () => {
+    const el = scroller.current;
+    if (!el || !el.clientHeight) return;
+    const i = Math.round(el.scrollTop / el.clientHeight);
+    if (i === activeRef.current) return;
+    activeRef.current = i; haptic.select(); setActive(i);
+    if (i > 0 && !hinted) { setHinted(true); void setPref("feedHintSeen", true); }
+  };
   const onScroll = () => {
+    window.clearTimeout(settle.current);
+    settle.current = window.setTimeout(land, 140);
     if (raf.current) return;
     raf.current = requestAnimationFrame(() => {
       raf.current = 0;
       const el = scroller.current;
-      if (!el || !el.clientHeight) return;
-      const i = Math.round(el.scrollTop / el.clientHeight);
-      if (i !== activeRef.current) { activeRef.current = i; haptic.select(); setActive(i); if (i > 0 && !hinted) { setHinted(true); void setPref("feedHintSeen", true); } }
+      const text = counter.current?.firstChild; // the one text node React owns: update it in place
+      if (!el || !el.clientHeight || !text) return;
+      text.nodeValue = `${Math.min(Math.round(el.scrollTop / el.clientHeight) + 1, list.length)}/${list.length}`;
     });
   };
+  useEffect(() => {
+    const el = scroller.current;
+    if (!el || !("onscrollend" in window)) return;
+    const end = () => { window.clearTimeout(settle.current); land(); };
+    el.addEventListener("scrollend", end);
+    return () => el.removeEventListener("scrollend", end);
+  });
 
   const next = () => { const el = scroller.current; el?.scrollBy({ top: el.clientHeight, behavior: "smooth" }); };
   const fail = (what: string) => (e: unknown) => toast(`${what} — ${describeError(e).message}`);
@@ -119,17 +140,17 @@ export function FeedScreen() {
   return (
     <>
       <div className="feed-top">
-        <div className="row" style={{ gap: 10 }}>
+        <div className="row" style={{ gap: 10, minWidth: 0 }}>
           <Owl size={36} alive mood={owlMoodFor(ctx, { onBreak: isOnBreak(profile.data?.settings) })} />
           <div className="feed-seg" role="tablist" aria-label="What to scroll">
             {(["all", "quick", "saved"] as const).map((m) => (
               <button key={m} role="tab" aria-selected={mode === m} data-active={mode === m} onClick={() => { haptic.select(); pickMode(m); }}>
-                {m === "quick" && <Zap size={13} strokeWidth={2.6} />}{m === "all" ? "To learn" : m === "quick" ? "Quick" : "Saved"}<span className="feed-seg-n num">{counts[m]}</span>
+                {m === "quick" && <Zap size={13} strokeWidth={2.6} />}{m === "all" ? "Learn" : m === "quick" ? "Quick" : "Saved"}
               </button>
             ))}
           </div>
         </div>
-        {list.length > 0 && <span className="feed-count num">{Math.min(active + 1, list.length)} / {list.length}</span>}
+        {list.length > 0 && <span ref={counter} className="feed-count num">{`${Math.min(active + 1, list.length)}/${list.length}`}</span>}
       </div>
 
       <div className="feed" ref={scroller} onScroll={onScroll}>
@@ -137,8 +158,8 @@ export function FeedScreen() {
         {/* Windowed: only the card on screen and its neighbours are real; the rest are empty
             snap-points of the same height. DOM size, images and reconciliation stay constant
             however long the list gets. */}
-        {list.map((it, i) => Math.abs(i - active) > 2 ? <section key={it.id} className="feed-card" aria-hidden /> : (
-          <FeedCard key={it.id} item={it} near={Math.abs(i - active) <= 1} busy={busy === it.id} hint={i === 0 && !hinted && list.length > 1}
+        {list.map((it, i) => Math.abs(i - active) > 3 ? <section key={it.id} className="feed-card" aria-hidden /> : (
+          <FeedCard key={it.id} item={it} near={Math.abs(i - active) <= 2} busy={busy === it.id} hint={i === 0 && !hinted && list.length > 1}
             reference={it.status === "saved"} onLearn={() => { haptic.success(); setStatus(it.id, "inbox").then(() => toast("Moved to To learn"), fail("Couldn't move it")); }}
             onOpen={() => nav(`/item/${it.id}`)} onStart={() => begin(it)} onLearned={() => onLearned(it)} onSkip={() => skip(it)} />
         ))}
