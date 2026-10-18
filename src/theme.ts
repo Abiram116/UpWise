@@ -11,6 +11,24 @@ function syncStatusBar() {
   const t = currentTheme();
   const isLight = t === "light" || (t === "system" && !window.matchMedia("(prefers-color-scheme: dark)").matches);
   window.AndroidNative?.setLightStatusBar?.(isLight);
+  syncNavBarColor();
+}
+
+/** Paint the strip Android keeps under the page (behind the gesture bar) in the nav bar's colour
+ * — or another colour, e.g. the intro's. Resolved by the browser, so any CSS colour works. */
+export function syncNavBarColor(css = "var(--surface-low)") {
+  const set = window.AndroidNative?.setNavBarColor;
+  if (!set || !document.body) return;
+  const probe = document.createElement("div");
+  probe.style.cssText = `position:absolute;visibility:hidden;background:${css}`;
+  document.body.appendChild(probe);
+  const c = getComputedStyle(probe).backgroundColor;
+  probe.remove();
+  const n = (c.match(/[\d.]+/g) ?? []).map(Number);
+  if (n.length < 3) return;
+  const k = c.startsWith("color(") ? 255 : 1; // color(srgb 0..1) vs rgb(0..255)
+  const [r, g, b] = n.slice(0, 3).map((v) => Math.round(v * k) & 255);
+  try { set((r << 16) | (g << 8) | b); } catch { /* ignore */ }
 }
 
 export function applyTheme(t: Theme) {
@@ -41,6 +59,7 @@ export function applyPalette(p: Palette) {
     root.setAttribute("data-palette", "wallpaper");
   } else root.removeAttribute("data-palette");
   try { localStorage.setItem("upwise:palette", p); } catch { /* ignore */ }
+  syncNavBarColor();
 }
 
 export function initTheme() {

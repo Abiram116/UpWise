@@ -9,6 +9,7 @@ import { getPref, setPref } from "./lib/store";
 import { flushOutbox } from "./lib/outbox";
 import { loadOpens, recordOpen } from "./lib/slot";
 import { syncLineBank } from "./lib/lineBank";
+import { startDiag } from "./lib/diag";
 import { Splash } from "./components/Splash";
 import { useReducedMotion } from "motion/react";
 import { connection } from "./lib/connection";
@@ -151,6 +152,7 @@ function Background() {
   useEffect(() => {
     void recordOpen();
     window.setTimeout(() => void syncLineBank(), 4000); // off the launch path
+    startDiag();
     const onShow = () => { if (document.visibilityState === "visible") void recordOpen(); };
     document.addEventListener("visibilitychange", onShow);
     return () => document.removeEventListener("visibilitychange", onShow);

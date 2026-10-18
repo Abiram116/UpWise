@@ -119,6 +119,13 @@ Living backlog of things to build next. Nothing here is built yet — this is th
 - [x] **New icon.** Minimal owl — two eyes glancing up-right, apricot beak, on sage.
 - Next: Gemini Nano (ML Kit GenAI Prompt API) for instant offline cheer/Today lines once it can be tested on the device.
 
+### v1.5.0 — a real pager for Scroll, a nav bar that can't move
+
+- [x] **Scroll is a pager, not a scroll-snap list** (src/lib/usePager.ts): the track follows your finger 1:1, a flick of any size or a drag past ~18% moves exactly one card, and the settle is a compositor Web Animation. No browser fling→snap hand-off left to stall. Learned/Skip changes wait until the card has landed. Wheel and arrow keys on the laptop.
+- [x] **Nav bar**: Android pads the page above the system gesture bar natively (strip painted in the nav colour, the intro's colour during the intro), so the page no longer depends on a bottom inset arriving on time. The WebView's own view scroll is reset when no keyboard is up.
+- [x] **On-device diagnostics** (diag_events, numbers only): layout anomalies (nav not on the bottom edge, panned/zoomed viewport, scrolled WebView), long animation frames and slow settles on the Scroll page.
+- [x] Releases: CI keeps only v1.0.0 and the newest release.
+
 ### v1.3.1 — steadier Scroll page, a better owl bubble
 
 - [x] **Scroll page**: the scroller no longer depends on the nav inset (it can't resize or re-snap mid-swipe); a bar inset that drops to zero is ignored; the nav pill is a plain CSS transition; the blurred backdrop is a 24×42 canvas instead of a GPU filter; depth is transform-only; cards update on `scrollend` only; neighbouring previews are decoded ahead.

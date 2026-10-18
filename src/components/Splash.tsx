@@ -2,6 +2,7 @@ import { useEffect, useMemo } from "react";
 import { motion, useReducedMotion } from "motion/react";
 import { BEAK, BEAK_LOW, BEAK_SHINE, C, EYES, EY, HEAD, PR, R } from "./BrandMark";
 import { haptic } from "../lib/haptics";
+import { syncNavBarColor } from "../theme";
 
 // Cold-start intro (~1.5s + a 0.6s exit), cut like a channel ident:
 //   0.00  darkness. Two eyes open (real upper lids lifting), glowing, huge in frame
@@ -35,6 +36,8 @@ const PUPIL = {
 
 export function Splash({ leaving = false }: { leaving?: boolean }) {
   const reduce = useReducedMotion() === true;
+  // The strip under the page matches the intro while it plays, then goes back to the nav colour.
+  useEffect(() => { syncNavBarColor("#040B08"); return () => syncNavBarColor(); }, []);
   useEffect(() => {
     if (reduce) return;
     const t = window.setTimeout(() => haptic.tap(), SNAP * 1000);

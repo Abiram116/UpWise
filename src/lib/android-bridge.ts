@@ -17,6 +17,10 @@ declare global {
       sessionStop?: () => void;
       /** JSON {top, bottom, keyboard} in CSS px. */
       insets?: () => string;
+      /** 0xRRGGBB for the strip Android keeps under the page. */
+      setNavBarColor?: (rgb: number) => void;
+      /** JSON layout facts for diagnostics. */
+      diag?: () => string;
     };
     /** Called by MainActivity on the system back gesture; true = handled in-app. */
     __upwiseBack?: () => boolean;

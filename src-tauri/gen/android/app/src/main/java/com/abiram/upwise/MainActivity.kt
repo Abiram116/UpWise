@@ -44,6 +44,9 @@ class MainActivity : TauriActivity() {
   private var safeTop = 0f
   private var safeBottom = 0f
   private var keyboardInset = 0f
+  private var navBottomPx = 0
+  private var imeVisible = false
+  private var navStripColor = android.graphics.Color.parseColor("#1A1A1D")
 
   private fun insetsJs() =
     "(function(s){s.setProperty('--native-safe-top','${safeTop}px');" +
@@ -102,22 +105,36 @@ class MainActivity : TauriActivity() {
       }
     })
 
-    // Bars are measured ignoring their momentary visibility, so a transient hide can't shrink the
-    // layout (the nav bar "dropping"). Values are cached here: the page also pulls them on boot and
-    // on resume (insets() below), so a reload that misses a push can never leave them unset.
+    // The page lives ABOVE the system navigation bar: Android pads the content view by the bar's
+    // height and paints that strip in the app's nav colour. So the web page never has to know or
+    // wait for a bottom inset — nothing at the bottom of the page can shift when one arrives late
+    // or flickers. (The status bar stays an overlay; the page handles the top itself.)
+    // Bars are measured ignoring momentary visibility, and a bar that has been there can't
+    // "disappear" for a frame. If the WebView's own view scroll ever drifts (a keyboard that
+    // panned it), it's put back as soon as no keyboard is showing.
+    val content = findViewById<android.view.View>(android.R.id.content)
+    content.setBackgroundColor(navStripColor)
     ViewCompat.setOnApplyWindowInsetsListener(window.decorView) { _, insets ->
       val density = resources.displayMetrics.density
       val bars = insets.getInsetsIgnoringVisibility(WindowInsetsCompat.Type.systemBars())
-      // A bar that has been there doesn't "disappear" for a frame and come back: ignore a drop
-      // to zero (that was the nav bar sliding down and the page re-laying out under your thumb).
+      val ime = insets.getInsets(WindowInsetsCompat.Type.ime()).bottom
       val top = bars.top / density
-      val bottom = bars.bottom / density
       if (top > 0f || safeTop == 0f) safeTop = top
-      if (bottom > 0f || safeBottom == 0f) safeBottom = bottom
-      keyboardInset = insets.getInsets(WindowInsetsCompat.Type.ime()).bottom / density
+      if (bars.bottom > 0 || navBottomPx == 0) navBottomPx = bars.bottom
+      if (content.paddingBottom != navBottomPx) content.setPadding(0, 0, 0, navBottomPx)
+      safeBottom = 0f
+      keyboardInset = maxOf(0, ime - navBottomPx) / density
+      imeVisible = ime > 0
+      if (!imeVisible) webView?.let { if (it.scrollY != 0 || it.scrollX != 0) it.scrollTo(0, 0) }
       pushInsets()
       insets
     }
+  }
+
+  override fun onResume() {
+    super.onResume()
+    if (!imeVisible) webView?.let { if (it.scrollY != 0 || it.scrollX != 0) it.scrollTo(0, 0) }
+    pushInsets()
   }
 
   override fun onDestroy() {
@@ -146,6 +163,26 @@ class MainActivity : TauriActivity() {
   }
 
   private inner class NativeBridge {
+    /** Colour of the strip under the page (behind the system gesture bar), as 0xRRGGBB. */
+    @JavascriptInterface
+    fun setNavBarColor(rgb: Int) {
+      handler.post {
+        navStripColor = android.graphics.Color.rgb((rgb shr 16) and 255, (rgb shr 8) and 255, rgb and 255)
+        findViewById<android.view.View>(android.R.id.content).setBackgroundColor(navStripColor)
+      }
+    }
+
+    /** Layout facts for the in-app diagnostics (numbers only). */
+    @JavascriptInterface
+    fun diag(): String {
+      val d = resources.displayMetrics.density
+      val w = webView
+      val c = findViewById<android.view.View>(android.R.id.content)
+      val rate = try { (if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) display else @Suppress("DEPRECATION") windowManager.defaultDisplay)?.refreshRate ?: 0f } catch (e: Exception) { 0f }
+      return "{\"webScrollY\":${w?.scrollY ?: -1},\"webH\":${(w?.height ?: 0) / d},\"contentH\":${c.height / d},\"contentPadB\":${c.paddingBottom / d}," +
+        "\"decorH\":${window.decorView.height / d},\"navBottom\":${navBottomPx / d},\"ime\":$imeVisible,\"hz\":$rate}"
+    }
+
     /** Current system-bar insets in CSS px, for the page to apply itself on boot/resume. */
     @JavascriptInterface
     fun insets(): String = "{\"top\":$safeTop,\"bottom\":$safeBottom,\"keyboard\":$keyboardInset}"

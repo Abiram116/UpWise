@@ -140,3 +140,22 @@ jobs:
         with:
           tag_name: ${{ github.ref_name }}
           files: UpWise-${{ github.ref_name }}-android-arm64.apk
+
+  # Keep the release list short: only v1.0.0 (the first release) and the one just published.
+  # Older releases and their tags are deleted once this release's builds are up.
+  prune-releases:
+    needs: [windows, android]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Delete older releases and their tags
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          KEEP: v1.0.0
+          CURRENT: ${{ github.ref_name }}
+        run: |
+          gh release list --repo "$GITHUB_REPOSITORY" --limit 200 --json tagName -q '.[].tagName' | while read -r tag; do
+            if [ -n "$tag" ] && [ "$tag" != "$KEEP" ] && [ "$tag" != "$CURRENT" ]; then
+              echo "deleting $tag"
+              gh release delete "$tag" --repo "$GITHUB_REPOSITORY" --yes --cleanup-tag
+            fi
+          done

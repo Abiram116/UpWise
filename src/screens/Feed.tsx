@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router";
 import { motion } from "motion/react";
 import { BookOpen, Check, ChevronUp, ExternalLink, Play, SkipForward, Zap } from "lucide-react";
@@ -8,6 +8,7 @@ import { describeError } from "../lib/errors";
 import { haptic } from "../lib/haptics";
 import { openExternal } from "../lib/links";
 import { startItem } from "../lib/startItem";
+import { usePager } from "../lib/usePager";
 import { getPref, setPref } from "../lib/store";
 import { breakDaySet, isOnBreak, streak, todayMinutes } from "../lib/stats";
 import { FORMAT_LABEL, fmtMinutes, formatOf, isoDay, itemLink } from "../lib/utils";
@@ -44,9 +45,6 @@ export function FeedScreen() {
   const toast = useToast();
   const setStatus = useSetStatus();
   const start = useSessionStore((s) => s.start);
-  const scroller = useRef<HTMLDivElement>(null);
-  const raf = useRef(0);
-  const settle = useRef(0);
   const counter = useRef<HTMLSpanElement>(null);
   const activeRef = useRef(0);
   const [active, setActive] = useState(0);
@@ -74,40 +72,47 @@ export function FeedScreen() {
     };
   }, [items.data, activity.data, profile.data, all.length]);
 
-  const pickMode = (m: Mode) => { setMode(m); void setPref("feedMode", m); scroller.current?.scrollTo({ top: 0 }); activeRef.current = 0; setActive(0); };
+  // The pager owns the gesture; React only hears about it once a card has landed. Anything
+  // that changes the list (learned / skipped) is queued until then, so the list never shifts
+  // under a card that's still moving.
+  const afterLand = useRef<(() => void) | null>(null);
+  const activeId = useRef<string | null>(null);
+  const idAt = (i: number) => list[i]?.id ?? "end";
+  const writeCounter = (i: number) => {
+    const text = counter.current?.firstChild; // the one text node React owns: update it in place
+    if (text) text.nodeValue = `${Math.min(i + 1, list.length)}/${list.length}`;
+  };
+  const land = (i: number) => {
+    if (i !== activeRef.current) {
+      activeRef.current = i; activeId.current = idAt(i); haptic.select(); setActive(i);
+      if (i > 0 && !hinted) { setHinted(true); void setPref("feedHintSeen", true); }
+    }
+    const job = afterLand.current; afterLand.current = null;
+    if (job) window.setTimeout(job, 60);
+  };
+  const pager = usePager(list.length + 1, active, land, writeCounter);
 
-  // Nothing React-y happens mid-swipe: the counter is written straight to the DOM, and the
-  // window of real cards only moves once the snap has landed (scrollend, or a short quiet
-  // timer where scrollend isn't supported) — so no mounting or image decoding during the
-  // gesture, which is what caused the mid-scroll hitch. The tick fires as the card lands.
-  const land = () => {
-    const el = scroller.current;
-    if (!el || !el.clientHeight) return;
-    const i = Math.round(el.scrollTop / el.clientHeight);
-    if (i === activeRef.current) return;
-    activeRef.current = i; haptic.select(); setActive(i);
-    if (i > 0 && !hinted) { setHinted(true); void setPref("feedHintSeen", true); }
-  };
-  const hasScrollEnd = "onscrollend" in window;
-  const onScroll = () => {
-    // scrollend fires when the finger is up AND the snap has landed. Only browsers without it
-    // fall back to a quiet timer (which could otherwise fire while you're holding a card still).
-    if (!hasScrollEnd) { window.clearTimeout(settle.current); settle.current = window.setTimeout(land, 220); }
-    if (raf.current) return;
-    raf.current = requestAnimationFrame(() => {
-      raf.current = 0;
-      const el = scroller.current;
-      const text = counter.current?.firstChild; // the one text node React owns: update it in place
-      if (!el || !el.clientHeight || !text) return;
-      text.nodeValue = `${Math.min(Math.round(el.scrollTop / el.clientHeight) + 1, list.length)}/${list.length}`;
-    });
-  };
+  // The list changed (something learned, skipped or added): stay on the same card.
+  useLayoutEffect(() => {
+    const id = activeId.current;
+    const idx = !id ? -1 : id === "end" ? list.length : list.findIndex((it) => it.id === id);
+    const want = idx >= 0 ? idx : Math.min(activeRef.current, list.length);
+    if (want !== activeRef.current) { activeRef.current = want; setActive(want); }
+    activeId.current = idAt(want);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [list]);
+
+  const pickMode = (m: Mode) => { setMode(m); void setPref("feedMode", m); activeRef.current = 0; activeId.current = null; setActive(0); };
+
+  // Laptop: arrow keys / j k move between cards.
   useEffect(() => {
-    const el = scroller.current;
-    if (!el || !hasScrollEnd) return;
-    const end = () => land();
-    el.addEventListener("scrollend", end);
-    return () => el.removeEventListener("scrollend", end);
+    const onKey = (e: KeyboardEvent) => {
+      if ((e.target as HTMLElement)?.closest?.("input, textarea, [contenteditable]")) return;
+      if (e.key === "ArrowDown" || e.key === "j") pager.go(pager.current() + 1);
+      else if (e.key === "ArrowUp" || e.key === "k") pager.go(pager.current() - 1);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
   });
 
   // Decode the next few previews while you're still reading this one, so a card arriving never
@@ -122,30 +127,32 @@ export function FeedScreen() {
     }
   }, [active, list]);
 
-  const next = () => { const el = scroller.current; el?.scrollBy({ top: el.clientHeight, behavior: "smooth" }); };
+  const next = () => pager.go(activeRef.current + 1);
   const fail = (what: string) => (e: unknown) => toast(`${what} — ${describeError(e).message}`);
 
   const begin = (it: Item) => startItem(it, start, toast);
   // Move on first, apply a beat later: the scroll stays smooth and the card you just left
   // leaves the list while you're already looking at the next one.
   const learned = async (it: Item, minutes: number) => {
-    setBusy(it.id); haptic.success(); next();
-    window.setTimeout(async () => {
+    setBusy(it.id); haptic.success();
+    afterLand.current = async () => {
       try {
         await logManualMinutes(it.id, minutes);
         await setStatus(it.id, "completed");
         celebrateDone(it.title, { quiet: true });
       } catch (e) { fail("Couldn't save that")(e); }
       finally { setBusy(null); }
-    }, 420);
+    };
+    next();
   };
   const skip = (it: Item) => {
-    haptic.tap(); next();
-    window.setTimeout(() => {
+    haptic.tap();
+    afterLand.current = () => {
       setStatus(it.id, "skipped").then(
         () => toast("Skipped", { label: "Undo", onClick: () => void setStatus(it.id, "queued").catch(() => {}) }),
         fail("Couldn't skip it"));
-    }, 420);
+    };
+    next();
   };
   const onLearned = (it: Item) => (est(it) <= 10 ? learned(it, Math.max(1, Math.round(est(it)))) : setAsking(it));
 
@@ -167,17 +174,17 @@ export function FeedScreen() {
         {list.length > 0 && <span ref={counter} className="feed-count num">{`${Math.min(active + 1, list.length)}/${list.length}`}</span>}
       </div>
 
-      <div className="feed" ref={scroller} onScroll={onScroll}>
+      <div className="feed" {...pager.bind}>
         {noQuick && <p className="feed-note">Nothing quick right now — showing everything.</p>}
-        {/* Windowed: only the card on screen and its neighbours are real; the rest are empty
-            snap-points of the same height. DOM size, images and reconciliation stay constant
-            however long the list gets. */}
-        {list.map((it, i) => Math.abs(i - active) > 3 ? <section key={it.id} className="feed-card" aria-hidden /> : (
-          <FeedCard key={it.id} item={it} near={Math.abs(i - active) <= 2} busy={busy === it.id} hint={i === 0 && !hinted && list.length > 1}
+        {/* Windowed: only the card on screen and its two neighbours each way exist at all. Each
+            sits at its own slot (index × one screen); the track moves, the cards never do. */}
+        <div className="feed-track" ref={pager.track}>
+        {list.map((it, i) => Math.abs(i - active) > 2 ? null : (
+          <FeedCard key={it.id} pos={i} item={it} near={Math.abs(i - active) <= 2} busy={busy === it.id} hint={i === 0 && !hinted && list.length > 1}
             reference={it.status === "saved"} onLearn={() => { haptic.success(); setStatus(it.id, "inbox").then(() => toast("Moved to To learn"), fail("Couldn't move it")); }}
             onOpen={() => nav(`/item/${it.id}`)} onStart={() => begin(it)} onLearned={() => onLearned(it)} onSkip={() => skip(it)} />
         ))}
-        <section className="feed-card feed-end">
+        {Math.abs(list.length - active) <= 2 && <section className="feed-card feed-end" style={{ transform: `translate3d(0, ${list.length * 100}%, 0)` }}>
           <motion.div initial={{ scale: 0.7, opacity: 0 }} whileInView={{ scale: 1, opacity: 1 }} transition={spring}>
             <Owl size={110} alive mood={list.length ? "idle" : "happy"} />
           </motion.div>
@@ -186,7 +193,8 @@ export function FeedScreen() {
             {list.length ? "Save a few more and they'll be waiting here." : "Nothing left to learn. Share something new from YouTube or Instagram."}
           </p>
           <Pill variant="tonal" size="lg" onClick={() => nav("/")}>Back to Today</Pill>
-        </section>
+        </section>}
+        </div>
       </div>
 
       <FinishSheet open={!!asking} onClose={() => setAsking(null)} onDone={async (m) => { const it = asking; setAsking(null); if (it) await learned(it, m); }} />
@@ -218,13 +226,13 @@ function Ambient({ url }: { url: string }) {
   return <canvas ref={ref} className="feed-bg" width={24} height={42} aria-hidden />;
 }
 
-function FeedCard({ item, near, busy, hint, reference, onLearn, onOpen, onStart, onLearned, onSkip }: {
-  item: Item; near: boolean; busy: boolean; hint: boolean; reference: boolean; onLearn: () => void; onOpen: () => void; onStart: () => void; onLearned: () => void; onSkip: () => void;
+function FeedCard({ pos, item, near, busy, hint, reference, onLearn, onOpen, onStart, onLearned, onSkip }: {
+  pos: number; item: Item; near: boolean; busy: boolean; hint: boolean; reference: boolean; onLearn: () => void; onOpen: () => void; onStart: () => void; onLearned: () => void; onSkip: () => void;
 }) {
   const format = formatOf(item);
   const tall = format === "short" || format === "reel";
   return (
-    <section className="feed-card" data-busy={busy}>
+    <section className="feed-card" data-busy={busy} style={{ transform: `translate3d(0, ${pos * 100}%, 0)` }}>
       {near && item.thumbnail_url && <Ambient url={item.thumbnail_url} />}
       {near && !item.thumbnail_url && <div className="feed-bg feed-bg-cover" />}
       <div className="feed-shade" />
