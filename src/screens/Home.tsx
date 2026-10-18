@@ -89,7 +89,7 @@ export function HomeScreen() {
       <header className="col" style={{ gap: 18 }}>
         <div className="row between">
           <motion.div className="owl-btn" initial={{ y: 28, opacity: 0, scale: 0.8 }} animate={{ y: 0, opacity: 1, scale: 1 }} transition={{ type: "spring", stiffness: 360, damping: 18, delay: 0.12 }} role="button" aria-label={hasNext ? "Hear the owl's new thought" : "Your owl"}>
-            <Owl size={58} alive interactive onTap={() => { if (hasNext) reveal(); }} mood={owlMoodFor(ctx, { loading, onBreak })}
+            <Owl size={58} alive interactive chatty={!hasNext} onTap={() => { if (hasNext) reveal(); }} mood={owlMoodFor(ctx, { loading, onBreak })}
               speakKey={line} speakMs={Math.min(2600, 700 + line.length * 38)} />
             {hasNext && <span className="owl-dot" />}
           </motion.div>

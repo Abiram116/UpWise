@@ -1,4 +1,5 @@
 import { useEffect, useId, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { AnimatePresence, animate, motion, useAnimationControls, useMotionValue, useReducedMotion, useSpring, useTransform, type MotionValue } from "motion/react";
 import { haptic } from "../lib/haptics";
 import { subscribePointer } from "../lib/pointerHub";
@@ -18,7 +19,24 @@ import { subscribePointer } from "../lib/pointerHub";
 export type OwlMood = "idle" | "happy" | "think" | "sleepy" | "waiting" | "excited" | "love" | "dizzy";
 type Reaction = "wink" | "hoot" | "puff" | "nod" | "tilt" | "love" | "dizzy" | "yawn";
 
-const SPEECH = ["hoo!", "hoot hoot", "psst…", "hm?", "hi :)"];
+// What the owl says when you tap it. First tap: something that fits the moment (its mood, the
+// time of day). Tapping again quickly escalates in a way that makes sense; five taps = dizzy.
+const TAP_MOOD: Partial<Record<OwlMood, string[]>> = {
+  sleepy: ["Zzz… five more minutes.", "Shh. Resting.", "Mm? I'm up. Kind of."],
+  happy: ["Goal's done. Proud of you.", "Good day, huh?", "That felt good."],
+  waiting: ["No rush. I'll wait.", "Whenever you're ready.", "Take your time."],
+  think: ["One sec, thinking…", "Hold on, almost there."],
+  excited: ["Let's go!", "Okay, I'm pumped.", "Yes! Keep going."],
+};
+const TAP_TIME: Record<string, string[]> = {
+  night: ["Late one. Short and sweet?", "Sleep soon, okay?"],
+  morning: ["Morning. One good thing first?", "Early brain is the good brain."],
+  afternoon: ["Got ten minutes?", "Still here. Still curious."],
+  evening: ["Evening. One small thing?", "Nice time to learn something."],
+};
+const TAP_IDLE = ["Yep, I'm here.", "Need something?", "Want me to pick one?"];
+const TAP_MORE = ["Hehe.", "That tickles.", "Careful now…"];
+const dayPart = (h = new Date().getHours()) => (h < 5 ? "night" : h < 12 ? "morning" : h < 17 ? "afternoon" : h < 22 ? "evening" : "night");
 
 // ---- geometry ----
 export const C = { bg0: "#52CC92", bg1: "#1B7A58", head: "#0E5C40", cream: "#FFF7E8", pupil: "#0E2B20", beak0: "#FFC24F", beak1: "#F28E1F", shine: "#FFE0A0", blush: "#FF8A7A", lid: "#2A8465", ear: "#37B484" };
@@ -47,8 +65,10 @@ function Lid({ x, clip, shut }: { x: number; clip: string; shut: MotionValue<num
   );
 }
 
-export function Owl({ size = 40, mood = "idle", alive = false, face = true, interactive = false, speakKey, speakMs = 1800, onLongPress, onTap }: {
+export function Owl({ size = 40, mood = "idle", alive = false, face = true, interactive = false, chatty = true, speakKey, speakMs = 1800, onLongPress, onTap }: {
   size?: number; mood?: OwlMood; alive?: boolean; face?: boolean; interactive?: boolean;
+  /** Say something when tapped (turn off where a tap already changes the text on screen). */
+  chatty?: boolean;
   speakKey?: string; speakMs?: number; onLongPress?: () => void; onTap?: () => void;
 }) {
   const id = useId().replace(/:/g, "");
@@ -68,7 +88,8 @@ export function Owl({ size = 40, mood = "idle", alive = false, face = true, inte
   const rest = useRef(0); // how far the lids sit closed at rest (sleepy owls are heavy-lidded)
   const pointerUntil = useRef(0);
   const [reaction, setReaction] = useState<Reaction | null>(null);
-  const [bubble, setBubble] = useState<string | null>(null);
+  const [bubble, setBubble] = useState<{ text: string; x: number; y: number; cx: number; k: number } | null>(null);
+  const lastSaid = useRef("");
   const [talking, setTalking] = useState(false);
   const [hearts, setHearts] = useState(0);
   const reactTimer = useRef<number | undefined>(undefined);
@@ -160,12 +181,20 @@ export function Owl({ size = 40, mood = "idle", alive = false, face = true, inte
   const react = (r: Reaction, ms: number, say?: string) => {
     window.clearTimeout(reactTimer.current);
     setReaction(r);
-    if (say) setBubble(say);
+    const box = root.current?.getBoundingClientRect();
+    if (say && box) setBubble({ text: say, x: box.left, y: box.bottom + 8, cx: box.left + box.width / 2, k: Date.now() });
     if (r === "love") setHearts((n) => n + 1);
     reactTimer.current = window.setTimeout(() => { setReaction(null); setBubble(null); }, ms);
   };
   useEffect(() => () => window.clearTimeout(reactTimer.current), []);
-  const say = () => SPEECH[Math.floor(Math.random() * SPEECH.length)];
+  const lineFor = (count: number) => {
+    if (count >= 2) return TAP_MORE[Math.min(count - 2, TAP_MORE.length - 1)];
+    const pool = TAP_MOOD[mode] ?? [...TAP_TIME[dayPart()], ...TAP_IDLE];
+    const fresh = pool.filter((l) => l !== lastSaid.current);
+    const line = (fresh.length ? fresh : pool)[Math.floor(Math.random() * (fresh.length || pool.length))];
+    lastSaid.current = line;
+    return line;
+  };
 
   // Speaking: a small hop with squash-and-stretch, beak chatter for roughly as long as the line takes to read.
   const first = useRef(true);
@@ -214,9 +243,17 @@ export function Owl({ size = 40, mood = "idle", alive = false, face = true, inte
     haptic.tap();
     onTap?.();
     if (taps.current.length >= 5) { taps.current = []; react("dizzy", 3000, "whoa… 😵"); haptic.warn(); return; }
-    const pick = (["wink", "hoot", "puff", "nod", "tilt"] as const)[Math.floor(Math.random() * 5)];
+    const count = taps.current.length;
+    // A line on the first tap most of the time, always when you keep tapping; sometimes just a
+    // silent gesture so it isn't a speech machine.
+    if (chatty && (count >= 2 || Math.random() < 0.65)) {
+      const line = lineFor(count);
+      react("hoot", Math.max(1500, 900 + line.length * 45), line);
+      void hop.start({ y: [0, -size * 0.1, 0], transition: { duration: 0.35 } });
+      return;
+    }
+    const pick = (["wink", "puff", "nod", "tilt"] as const)[Math.floor(Math.random() * 4)];
     if (pick === "wink") { react("wink", 700); void animate(shutR, [0, 1, 1, 0], { duration: 0.55, times: [0, 0.2, 0.65, 1] }); }
-    else if (pick === "hoot") { react("hoot", 1700, say()); void hop.start({ y: [0, -size * 0.1, 0], transition: { duration: 0.35 } }); }
     else if (pick === "puff") { react("puff", 800); void hop.start({ scaleX: [1, 1.12, 1.12, 1], scaleY: [1, 1.08, 1.08, 1], transition: { duration: 0.8, times: [0, 0.25, 0.6, 1], ease: "easeInOut" } }); }
     else if (pick === "nod") { react("nod", 700); void hop.start({ y: [0, size * 0.05, 0, size * 0.035, 0], transition: { duration: 0.6, ease: "easeInOut" } }); }
     else { react("tilt", 1100); const d = Math.random() < 0.5 ? -1 : 1; void hop.start({ rotate: [0, 12 * d, 12 * d, 0], transition: { duration: 1.1, times: [0, 0.2, 0.75, 1], ease: "easeInOut" } }); }
@@ -294,13 +331,21 @@ export function Owl({ size = 40, mood = "idle", alive = false, face = true, inte
         </AnimatePresence>
       </motion.svg>
 
-      <AnimatePresence>
-        {bubble && (
-          <motion.div className="owl-bubble" initial={{ opacity: 0, scale: 0.5, y: 6 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.8 }} transition={{ type: "spring", stiffness: 500, damping: 18 }}>
-            {bubble}
-          </motion.div>
-        )}
-      </AnimatePresence>
+      {/* The bubble lives on top of the whole app (a portal), so nothing — a headline, a card —
+          can sit over it or clip it. Opacity + a small slide only: scaling text makes it blurry. */}
+      {createPortal(
+        <AnimatePresence>
+          {bubble && (() => {
+            const w = Math.min(window.innerWidth - 24, bubble.text.length * 7.8 + 30);
+            const left = Math.max(12, Math.min(bubble.x, window.innerWidth - 12 - w));
+            return (
+              <motion.div key={bubble.k} className="owl-bubble" style={{ left, top: bubble.y, "--ax": `${Math.max(12, Math.min(w - 18, bubble.cx - left - 5))}px` } as React.CSSProperties}
+                initial={{ opacity: 0, y: -5 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} transition={{ duration: 0.18, ease: "easeOut" }}>
+                {bubble.text}
+              </motion.div>
+            );
+          })()}
+        </AnimatePresence>, document.body)}
     </div>
   );
 }

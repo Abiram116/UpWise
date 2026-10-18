@@ -108,8 +108,12 @@ class MainActivity : TauriActivity() {
     ViewCompat.setOnApplyWindowInsetsListener(window.decorView) { _, insets ->
       val density = resources.displayMetrics.density
       val bars = insets.getInsetsIgnoringVisibility(WindowInsetsCompat.Type.systemBars())
-      safeTop = bars.top / density
-      safeBottom = bars.bottom / density
+      // A bar that has been there doesn't "disappear" for a frame and come back: ignore a drop
+      // to zero (that was the nav bar sliding down and the page re-laying out under your thumb).
+      val top = bars.top / density
+      val bottom = bars.bottom / density
+      if (top > 0f || safeTop == 0f) safeTop = top
+      if (bottom > 0f || safeBottom == 0f) safeBottom = bottom
       keyboardInset = insets.getInsets(WindowInsetsCompat.Type.ime()).bottom / density
       pushInsets()
       insets

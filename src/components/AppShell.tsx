@@ -20,7 +20,7 @@ const dests = [
   { to: "/settings", label: "Settings", icon: Settings },
 ];
 
-function Dest({ to, label, icon: Icon, layoutId }: (typeof dests)[number] & { layoutId: string }) {
+function Dest({ to, label, icon: Icon }: (typeof dests)[number]) {
   return (
     // replace: tabs are siblings, not a trail — switching them shouldn't pile up history
     // that the back gesture then has to walk through one tab at a time.
@@ -28,7 +28,7 @@ function Dest({ to, label, icon: Icon, layoutId }: (typeof dests)[number] & { la
       {({ isActive }) => (
         <span data-active={isActive} className="dest" style={{ display: "contents" }}>
           <span className="dest-ind">
-            {isActive && <motion.span layoutId={layoutId} className="dest-pill" transition={spring} />}
+            <span className="dest-pill" />
             <Icon size={22} strokeWidth={isActive ? 2.4 : 1.9} />
           </span>
           <span>{label}</span>
@@ -95,7 +95,7 @@ export function AppShell() {
         <motion.button className="rail-fab" aria-label="Add link" onClick={() => setAddOpen(true)} whileTap={{ scale: 0.94 }} transition={spring}>
           <Plus size={24} strokeWidth={2.2} />
         </motion.button>
-        {dests.map((d) => <Dest key={d.to} {...d} layoutId="rail-pill" />)}
+        {dests.map((d) => <Dest key={d.to} {...d} />)}
       </aside>
 
       <main className="app-main">
@@ -120,7 +120,7 @@ export function AppShell() {
       </AnimatePresence>
 
       <nav className="navbar">
-        {dests.map((d) => <Dest key={d.to} {...d} layoutId="nav-pill" />)}
+        {dests.map((d) => <Dest key={d.to} {...d} />)}
       </nav>
 
       <AddSheet open={addOpen} onClose={() => setAddOpen(false)} />

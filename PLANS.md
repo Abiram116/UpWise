@@ -119,6 +119,11 @@ Living backlog of things to build next. Nothing here is built yet — this is th
 - [x] **New icon.** Minimal owl — two eyes glancing up-right, apricot beak, on sage.
 - Next: Gemini Nano (ML Kit GenAI Prompt API) for instant offline cheer/Today lines once it can be tested on the device.
 
+### v1.3.1 — steadier Scroll page, a better owl bubble
+
+- [x] **Scroll page**: the scroller no longer depends on the nav inset (it can't resize or re-snap mid-swipe); a bar inset that drops to zero is ignored; the nav pill is a plain CSS transition; the blurred backdrop is a 24×42 canvas instead of a GPU filter; depth is transform-only; cards update on `scrollend` only; neighbouring previews are decoded ahead.
+- [x] **Owl taps**: the bubble floats above the app (it overlapped the headline); lines fit the owl's mood and time of day and escalate sensibly when you keep tapping.
+
 ### v1.3.0 — one owl, calmer feed, fewer AI calls
 
 - [x] **Cold-start intro** rebuilt as a short ident: eyes open in the dark, a camera snap with iris, rings and a haptic click, the wordmark slams in, then the screen lifts away. Plays only on a true cold start — launcher shortcuts no longer restart a running app (invisible trampoline activity).

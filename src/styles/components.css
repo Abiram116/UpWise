@@ -130,7 +130,8 @@ select.input { padding-right: 36px; appearance: none; -webkit-appearance: none; 
 }
 .dest { display: flex; flex-direction: column; align-items: center; justify-content: flex-start; gap: 4px; color: var(--on-surface-2); font-size: 12px; font-weight: 500; }
 .dest-ind { position: relative; width: 64px; height: 32px; border-radius: 16px; display: grid; place-items: center; }
-.dest-pill { position: absolute; inset: 0; border-radius: 16px; background: var(--primary-container); }
+.dest-pill { position: absolute; inset: 0; border-radius: 16px; background: var(--primary-container); opacity: 0; transform: scaleX(0.5); transition: transform .3s cubic-bezier(.2, .8, .2, 1), opacity .2s; }
+.dest[data-active="true"] .dest-pill { opacity: 1; transform: none; }
 .dest[data-active="true"] { color: var(--on-surface); }
 .dest[data-active="true"] .dest-ind { color: var(--on-primary-container); }
 .dest-ind svg { position: relative; }
@@ -310,7 +311,10 @@ select.input { padding-right: 36px; appearance: none; -webkit-appearance: none; 
 .clamp-3 { display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
 
 /* ---------- Scroll feed (reels-style) ---------- */
-.feed { position: fixed; z-index: 1; left: 0; right: 0; top: 0; bottom: calc(var(--nav-h) + var(--safe-bottom));
+/* The scroller fills the screen and never changes size (the nav bar draws over its foot); only the
+   cards' inner padding follows the nav inset, so a late inset update can't resize the scroller,
+   re-snap the cards or make the page hitch. */
+.feed { position: fixed; z-index: 1; inset: 0;
   overflow-y: auto; scroll-snap-type: y mandatory; overscroll-behavior: contain; background: var(--surface); }
 .feed-loading { padding: calc(var(--safe-top) + 72px) var(--gutter) 0; }
 .feed-top { position: fixed; z-index: 5; left: 14px; right: 14px; top: calc(var(--safe-top) + 10px); display: flex; align-items: center; justify-content: space-between; gap: 8px; pointer-events: none; }
@@ -321,19 +325,20 @@ select.input { padding-right: 36px; appearance: none; -webkit-appearance: none; 
 .feed-count { flex-shrink: 0; white-space: nowrap; font-size: 13px; font-weight: 600; padding: 7px 12px; border-radius: 999px; color: var(--on-surface-2); background: color-mix(in srgb, var(--surface-low) 92%, transparent); }
 .feed-note { position: absolute; top: calc(var(--safe-top) + 62px); left: 0; right: 0; text-align: center; font-size: 13px; color: var(--on-surface-3); z-index: 2; }
 .feed-card { position: relative; height: 100%; scroll-snap-align: start; scroll-snap-stop: always; overflow: hidden; contain: layout paint;
-  display: flex; flex-direction: column; padding: calc(var(--safe-top) + 62px) 20px 18px; transition: opacity .3s; }
+  display: flex; flex-direction: column; padding: calc(var(--safe-top) + 62px) 20px calc(var(--nav-h) + var(--safe-bottom) + 18px); transition: opacity .3s; }
 .feed-card[data-busy="true"] { opacity: 0.55; }
-/* Blurred ambient backdrop, cheaply: blur a quarter-size copy (16× fewer pixels) and scale it
-   up — same soft look, a fraction of the GPU cost, and it stays out of the scroll path. */
-.feed-bg { position: absolute; left: 36%; top: 36%; width: 28%; height: 28%; background-size: cover; background-position: center; transform: scale(4); filter: blur(7px) saturate(1.35) brightness(0.7); will-change: transform; }
+/* Ambient backdrop with no GPU filter at all: the preview is pre-shrunk once into a 24×42 canvas
+   (blurred there, where it costs nothing) and the browser just stretches that tiny texture. */
+.feed-bg { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; transition: opacity .5s; }
+.feed-bg[data-ready="true"] { opacity: 1; }
 .feed-shade { position: absolute; inset: 0; background: linear-gradient(180deg, color-mix(in srgb, var(--surface) 25%, transparent) 0%, color-mix(in srgb, var(--surface) 55%, transparent) 45%, var(--surface) 92%); }
 .feed-media { position: relative; z-index: 1; flex: 1 1 0; min-height: 0; display: grid; place-items: center; width: 100%; padding: 6px 0 14px; }
-.feed-thumb { position: relative; border-radius: 28px; overflow: hidden; background: var(--surface-mid); display: grid; place-items: center; color: var(--on-surface-3);
+.feed-thumb { position: relative; border-radius: 28px; background: var(--surface-mid); display: grid; place-items: center; color: var(--on-surface-3);
   width: 100%; max-height: 100%; aspect-ratio: 16 / 9; box-shadow: 0 18px 44px -14px rgba(0, 0, 0, 0.55); }
 .feed-thumb[data-format="post"] { aspect-ratio: 1 / 1; width: auto; height: 100%; max-width: 100%; }
 .feed-thumb[data-tall="true"] { aspect-ratio: 9 / 16; width: auto; height: 100%; max-width: 100%; }
 .feed-thumb[data-empty="true"] { background: linear-gradient(150deg, var(--primary-container), var(--surface-mid)); color: var(--on-primary-container); }
-.feed-thumb img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+.feed-thumb img, .feed-thumb svg { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; border-radius: 28px; }
 .feed-info { position: relative; z-index: 1; display: flex; flex-direction: column; gap: 8px; }
 .feed-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 12px; font-size: 13px; font-weight: 500; color: var(--on-surface-2); }
 .feed-tag { padding: 2px 9px; border-radius: 999px; background: var(--primary-container); color: var(--on-primary-container); font-size: 12px; }
@@ -346,7 +351,7 @@ select.input { padding-right: 36px; appearance: none; -webkit-appearance: none; 
   .feed { left: var(--rail-w); bottom: 0; }
   .feed-top { left: var(--rail-w); right: 0; width: min(520px, calc(100vw - var(--rail-w) - 40px)); margin: 0 auto; padding: 0 20px; top: calc(var(--titlebar-h, 0px) + 12px); }
   .feed-note { top: calc(var(--titlebar-h, 0px) + 66px); }
-  .feed-card { max-width: 520px; margin: 0 auto; padding-top: calc(var(--titlebar-h, 0px) + 70px); }
+  .feed-card { max-width: 520px; margin: 0 auto; padding-top: calc(var(--titlebar-h, 0px) + 70px); padding-bottom: 18px; }
 }
 
 /* celebration extras: persistent card, tap hint, hero add-ons */
@@ -365,9 +370,9 @@ select.input { padding-right: 36px; appearance: none; -webkit-appearance: none; 
 .note-area { min-height: 46dvh; padding: 18px 20px; font-size: 17px; line-height: 1.5; border-radius: 24px; resize: none; }
 
 /* owl speech bubble */
-.owl-bubble { position: absolute; left: 0; top: calc(100% + 9px); z-index: 5; white-space: nowrap; pointer-events: none;
+.owl-bubble { position: fixed; z-index: 120; max-width: calc(100vw - 24px); white-space: nowrap; pointer-events: none;
   padding: 6px 12px; border-radius: 14px; font-size: 13px; font-weight: 700; line-height: 1.2; background: var(--inverse-surface); color: var(--inverse-on-surface); box-shadow: var(--shadow-float); }
-.owl-bubble::after { content: ""; position: absolute; left: 22px; bottom: 100%; border: 5px solid transparent; border-bottom-color: var(--inverse-surface); }
+.owl-bubble::after { content: ""; position: absolute; left: var(--ax, 22px); bottom: 100%; border: 5px solid transparent; border-bottom-color: var(--inverse-surface); }
 
 
 /* cold-start intro: always the dark "ident" palette, whatever the app theme */
@@ -429,11 +434,9 @@ select.input { padding-right: 36px; appearance: none; -webkit-appearance: none; 
 @supports (animation-timeline: view()) {
   .feed-card { view-timeline: --card block; }
   .feed-thumb { animation: feed-depth linear both; animation-timeline: --card; }
-  .feed-bg { animation: feed-bg-depth linear both; animation-timeline: --card; }
   .feed-info { animation: feed-info linear both; animation-timeline: --card; }
 }
-@keyframes feed-depth { 0% { transform: translateY(9%) scale(0.88); opacity: 0.25; } 50% { transform: none; opacity: 1; } 100% { transform: translateY(-9%) scale(0.88); opacity: 0.25; } }
-@keyframes feed-bg-depth { 0% { transform: translateY(12%) scale(4); } 50% { transform: scale(4); } 100% { transform: translateY(-12%) scale(4); } }
-@keyframes feed-info { 0% { transform: translateY(26px); opacity: 0; } 50% { transform: none; opacity: 1; } 100% { transform: translateY(-16px); opacity: 0.3; } }
-.feed-bg-cover { background: radial-gradient(circle at 30% 22%, color-mix(in srgb, var(--primary) 45%, transparent), transparent 72%), radial-gradient(circle at 75% 80%, color-mix(in srgb, var(--warm) 35%, transparent), transparent 70%); filter: none; }
+@keyframes feed-depth { 0% { transform: translateY(8%) scale(0.92); } 50% { transform: none; } 100% { transform: translateY(-8%) scale(0.92); } }
+@keyframes feed-info { 0% { transform: translateY(22px); } 50% { transform: none; } 100% { transform: translateY(-14px); } }
+.feed-bg-cover { opacity: 1; background: radial-gradient(circle at 30% 22%, color-mix(in srgb, var(--primary) 45%, transparent), transparent 72%), radial-gradient(circle at 75% 80%, color-mix(in srgb, var(--warm) 35%, transparent), transparent 70%); }
 .thumb svg, .thumb-lg svg { width: 100%; height: 100%; }

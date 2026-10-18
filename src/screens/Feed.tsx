@@ -88,9 +88,11 @@ export function FeedScreen() {
     activeRef.current = i; haptic.select(); setActive(i);
     if (i > 0 && !hinted) { setHinted(true); void setPref("feedHintSeen", true); }
   };
+  const hasScrollEnd = "onscrollend" in window;
   const onScroll = () => {
-    window.clearTimeout(settle.current);
-    settle.current = window.setTimeout(land, 140);
+    // scrollend fires when the finger is up AND the snap has landed. Only browsers without it
+    // fall back to a quiet timer (which could otherwise fire while you're holding a card still).
+    if (!hasScrollEnd) { window.clearTimeout(settle.current); settle.current = window.setTimeout(land, 220); }
     if (raf.current) return;
     raf.current = requestAnimationFrame(() => {
       raf.current = 0;
@@ -102,11 +104,23 @@ export function FeedScreen() {
   };
   useEffect(() => {
     const el = scroller.current;
-    if (!el || !("onscrollend" in window)) return;
-    const end = () => { window.clearTimeout(settle.current); land(); };
+    if (!el || !hasScrollEnd) return;
+    const end = () => land();
     el.addEventListener("scrollend", end);
     return () => el.removeEventListener("scrollend", end);
   });
+
+  // Decode the next few previews while you're still reading this one, so a card arriving never
+  // has to decode or upload a big image in the middle of your swipe.
+  const warmed = useRef(new Set<string>());
+  useEffect(() => {
+    for (let k = active - 1; k <= active + 3; k++) {
+      const u = list[k]?.thumbnail_url;
+      if (!u || warmed.current.has(u)) continue;
+      warmed.current.add(u);
+      const im = new Image(); im.decoding = "async"; im.src = u; void im.decode().catch(() => {});
+    }
+  }, [active, list]);
 
   const next = () => { const el = scroller.current; el?.scrollBy({ top: el.clientHeight, behavior: "smooth" }); };
   const fail = (what: string) => (e: unknown) => toast(`${what} — ${describeError(e).message}`);
@@ -180,6 +194,30 @@ export function FeedScreen() {
   );
 }
 
+/** The soft colour wash behind a card: the preview shrunk once to 24×42 and blurred there. */
+function Ambient({ url }: { url: string }) {
+  const ref = useRef<HTMLCanvasElement>(null);
+  useEffect(() => {
+    let dead = false;
+    const img = new Image();
+    img.decoding = "async";
+    img.src = url;
+    img.decode().then(() => {
+      const cv = ref.current, ctx = cv?.getContext("2d");
+      if (dead || !cv || !ctx) return;
+      const { width: W, height: H } = cv;
+      const k = Math.max(W / img.naturalWidth, H / img.naturalHeight); // cover
+      const w = img.naturalWidth * k, h = img.naturalHeight * k;
+      ctx.imageSmoothingQuality = "high";
+      ctx.filter = "blur(1.5px) saturate(1.4) brightness(0.72)";
+      ctx.drawImage(img, (W - w) / 2, (H - h) / 2, w, h);
+      cv.dataset.ready = "true";
+    }).catch(() => {});
+    return () => { dead = true; };
+  }, [url]);
+  return <canvas ref={ref} className="feed-bg" width={24} height={42} aria-hidden />;
+}
+
 function FeedCard({ item, near, busy, hint, reference, onLearn, onOpen, onStart, onLearned, onSkip }: {
   item: Item; near: boolean; busy: boolean; hint: boolean; reference: boolean; onLearn: () => void; onOpen: () => void; onStart: () => void; onLearned: () => void; onSkip: () => void;
 }) {
@@ -187,7 +225,7 @@ function FeedCard({ item, near, busy, hint, reference, onLearn, onOpen, onStart,
   const tall = format === "short" || format === "reel";
   return (
     <section className="feed-card" data-busy={busy}>
-      {near && item.thumbnail_url && <div className="feed-bg" style={{ backgroundImage: `url(${item.thumbnail_url})` }} />}
+      {near && item.thumbnail_url && <Ambient url={item.thumbnail_url} />}
       {near && !item.thumbnail_url && <div className="feed-bg feed-bg-cover" />}
       <div className="feed-shade" />
       <button className="feed-media" onClick={onOpen} aria-label="Open details">
