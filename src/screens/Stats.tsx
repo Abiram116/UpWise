@@ -61,13 +61,14 @@ export function StatsScreen() {
       <Rise>
         <p className="headline" style={{ lineHeight: 1.3 }}>
           <span style={{ color: "var(--warm)" }}><Count to={data.streak.current} /></span>-day streak, best {data.streak.best}.<br />
-          <Count to={data.totalDone} /> {data.totalDone === 1 ? "thing" : "things"} learned, <Count to={data.concepts} /> {data.concepts === 1 ? "concept" : "concepts"}.<br />
-          <span style={{ color: "var(--primary)" }}>{fmtMinutes(data.totalMinutes)}</span> invested.
+          <Count to={data.totalDone} /> learned in <span style={{ color: "var(--primary)" }}>{fmtMinutes(data.totalMinutes)}</span>.
         </p>
-        <p className="body" style={{ marginTop: 10 }}>
-          This week: {data.velocity.thisWeek} done, {trendWord} your usual {data.velocity.avgPrev}/week.
-          {data.bestHour != null && ` You learn best around ${fmtHour(data.bestHour)}.`}
-        </p>
+        {(data.velocity.thisWeek > 0 || data.velocity.avgPrev > 0 || data.bestHour != null) && (
+          <p className="body" style={{ marginTop: 10 }}>
+            {(data.velocity.thisWeek > 0 || data.velocity.avgPrev > 0) && `This week: ${data.velocity.thisWeek} done, ${trendWord} your usual ${data.velocity.avgPrev}.`}
+            {data.bestHour != null && ` You learn best around ${fmtHour(data.bestHour)}.`}
+          </p>
+        )}
       </Rise>
 
       <Rise>

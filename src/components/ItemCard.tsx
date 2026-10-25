@@ -2,7 +2,7 @@ import { useNavigate } from "react-router";
 import { motion } from "motion/react";
 import { Check, Clapperboard, Film, Image, Lightbulb, Link2, Newspaper, Play, Smartphone, StickyNote } from "lucide-react";
 import type { Item, ItemFormat } from "../lib/types";
-import { FORMAT_LABEL, confidence, fmtMinutes, formatOf, relativeTime } from "../lib/utils";
+import { FORMAT_LABEL, confidence, fmtMinutes, formatOf } from "../lib/utils";
 import { rise, spring } from "./ui";
 import { ItemThumb } from "./CoverArt";
 
@@ -29,12 +29,12 @@ export function ItemRow({ item, compact, shared = true }: { item: Item; compact?
         <div className={compact ? "truncate" : "clamp-2"} style={{ fontSize: 15.5, lineHeight: 1.3, fontWeight: 500, color: done ? "var(--on-surface-3)" : "var(--on-surface)" }}>
           {item.title ?? item.url}
         </div>
-        <div className="meta row wrap" style={{ gap: 8, rowGap: 2 }}>
-          <span className="row" style={{ gap: 4 }}><FormatIcon item={item} size={13} />{format === "link" ? host(item.url) || FORMAT_LABEL.link : FORMAT_LABEL[format]}</span>
-          {item.estimated_minutes != null && format !== "link" && format !== "note" && <span>{fmtMinutes(item.estimated_minutes)}</span>}
-          {item.category && <span>{item.category.name}</span>}
-          {!compact && <span>{relativeTime(item.created_at)}</span>}
-          {trust && <span style={{ color: "var(--error)" }}>{trust.label}</span>}
+        {/* One quiet line: what it is, how long, which area. */}
+        <div className="meta truncate">
+          {[format === "link" ? host(item.url) || FORMAT_LABEL.link : FORMAT_LABEL[format],
+            item.estimated_minutes != null && format !== "link" && format !== "note" ? fmtMinutes(item.estimated_minutes) : null,
+            item.category?.name].filter(Boolean).join(" · ")}
+          {trust && <span style={{ color: "var(--error)" }}> · {trust.label}</span>}
         </div>
       </div>
       {done && <span style={{ color: "var(--primary)" }}><Check size={18} strokeWidth={2.5} /></span>}

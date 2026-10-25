@@ -1,10 +1,8 @@
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { useNavigate } from "react-router";
 import { motion } from "motion/react";
-import { Clock, Flame, Play, Shield, Snowflake } from "lucide-react";
-import { useActivity, useItems, useProfile, useSessions } from "../lib/api";
-import { loadOpens, bestSlot, fmtSlot } from "../lib/slot";
-import { settingsOf } from "../lib/notifications";
+import { Flame, Play, Snowflake } from "lucide-react";
+import { useActivity, useItems, useProfile } from "../lib/api";
 import { heuristicPick, todayMinutes, isOnBreak } from "../lib/stats";
 import { startItem } from "../lib/startItem";
 import { isDesktop } from "../lib/platform";
@@ -12,7 +10,7 @@ import { owlMoodFor, useCoach, useLocalLine, type CoachCtx } from "../lib/coach"
 import { haptic } from "../lib/haptics";
 import { FORMAT_LABEL, fmtMinutes, formatOf, isoDay } from "../lib/utils";
 import type { Item } from "../lib/types";
-import { ItemRow, FormatIcon } from "../components/ItemCard";
+import { ItemRow } from "../components/ItemCard";
 import { Owl } from "../components/BrandMark";
 import { StreakSheet } from "../components/StreakSheet";
 import { MaskText } from "../components/MaskText";
@@ -32,9 +30,6 @@ export function HomeScreen() {
   const nav = useNavigate();
   const toast = useToast();
   const startSession = useSessionStore((s) => s.start);
-  const sessions = useSessions(30); // same query Background already runs
-  const [opens, setOpens] = useState<number[]>([]);
-  useEffect(() => { void loadOpens().then(setOpens); }, []);
   const [passed, setPassed] = useState<string[]>([]); // "Not now" — shuffles locally, no AI call
 
   const pending = useMemo(() => (items.data ?? []).filter((i) => TO_LEARN.has(i.status)), [items.data]);
@@ -64,25 +59,11 @@ export function HomeScreen() {
     const fromCoach = !passed.length && coach?.pick_item_id ? pool.find((i) => i.id === coach.pick_item_id) : null;
     return fromCoach ?? heuristicPick(pool.length ? pool : pending);
   }, [coach, pending, passed]);
-  const nextUp = useMemo(() => {
-    const ids = coach?.pick_item_id === pick?.id ? coach?.next_item_ids ?? [] : [];
-    return ids.map((id) => pending.find((i) => i.id === id)).filter((i): i is Item => !!i);
-  }, [coach, pick, pending]);
-
-  // The study slot is learned from when you open the app and study — shown, never set. Only
-  // while it's still ahead today, the goal isn't met, and notifications are on.
-  const slot = useMemo(() => {
-    const settings = settingsOf(profile.data);
-    if (!settings.enabled || onBreak || !pick || today >= target || !sessions.data) return null;
-    const sl = bestSlot(sessions.data, opens, settings);
-    const now = new Date();
-    return sl.hour * 60 + sl.minute > now.getHours() * 60 + now.getMinutes() ? sl : null;
-  }, [profile.data, onBreak, pick, today, target, sessions.data, opens]);
 
   const localLine = useLocalLine(ctx, pick);
   const line = onBreak ? "On a break. Enjoy it — your streak's safe." : coach?.line || localLine;
   const continuing = pending.filter((i) => i.status === "in_progress" && i.id !== pick?.id);
-  const recent = pending.filter((i) => i.status !== "in_progress" && i.id !== pick?.id).slice(0, 4);
+  const recent = pending.filter((i) => i.status !== "in_progress" && i.id !== pick?.id).slice(0, 3);
 
   return (
     <Page>
@@ -97,7 +78,6 @@ export function HomeScreen() {
             {streakInfo && (st > 0 || streakInfo.bank > 0) && (
               <button className="stat-pill" data-ice={streakInfo.onIce} style={streakInfo.onIce ? undefined : { color: "var(--warm)" }} onClick={() => { haptic.select(); setStreakOpen(true); }} aria-label={`${st} day streak, ${streakInfo.bank} freeze days banked`}>
                 {streakInfo.onIce ? <Snowflake size={15} strokeWidth={2.4} /> : <Flame size={15} strokeWidth={2.4} />}<b className="num">{st}</b>
-                {streakInfo.bank > 0 && <span className="row" style={{ gap: 2, color: "#4FA6E8" }}><Shield size={13} strokeWidth={2.4} /><b className="num" style={{ color: "inherit" }}>{streakInfo.bank}</b></span>}
               </button>
             )}
             {!onBreak && <GoalRing minutes={today} target={target} onClick={() => nav("/stats")} />}
@@ -116,35 +96,18 @@ export function HomeScreen() {
                 <div className="thumb thumb-lg"><ItemThumb item={pick} /></div>
                 <div className="col" style={{ gap: 8 }}>
                   <h2 className="headline focal clamp-3">{pick.title}</h2>
-                  <p className="meta row wrap" style={{ gap: 10 }}>
-                    <span className="row" style={{ gap: 5 }}><FormatIcon item={pick} size={15} /> {FORMAT_LABEL[formatOf(pick)]}</span>
-                    {pick.estimated_minutes != null && <span>~{fmtMinutes(pick.estimated_minutes)}</span>}
-                    {pick.category?.name && <span>{pick.category.name}</span>}
+                  <p className="meta">
+                    {[FORMAT_LABEL[formatOf(pick)], pick.estimated_minutes != null ? `~${fmtMinutes(pick.estimated_minutes)}` : null, pick.category?.name].filter(Boolean).join(" · ")}
                   </p>
                   {pick.ai?.summary && <p className="body clamp-2" style={{ color: "var(--on-surface-2)" }}>{pick.ai.summary}</p>}
                 </div>
               </button>
-              {nextUp.length > 0 && (
-                <div className="col" style={{ gap: 2, marginTop: 14 }}>
-                  <p className="section-title">Then</p>
-                  {nextUp.map((i) => (
-                    <button key={i.id} className="row body" style={{ gap: 8, minHeight: 40, textAlign: "left" }} onClick={() => nav(`/item/${i.id}`)}>
-                      <FormatIcon item={i} size={15} />
-                      <span className="truncate grow">{i.title}</span>
-                      {i.estimated_minutes != null && <span className="meta num">~{fmtMinutes(i.estimated_minutes)}</span>}
-                    </button>
-                  ))}
-                </div>
-              )}
               <div className="row" style={{ gap: 8, marginTop: 20 }}>
                 <Pill variant="filled" size="lg" className="grow" onClick={() => { startItem(pick, startSession, toast, { open: !(isDesktop() && formatOf(pick) === "video") }); nav(`/item/${pick.id}`); }}>
                   <Play size={18} fill="currentColor" /> Start
                 </Pill>
                 {pending.length > 1 && <Pill variant="text" size="lg" onClick={() => setPassed((p) => [...p, pick.id])}>Not now</Pill>}
               </div>
-              {slot && (
-                <p className="meta row" style={{ gap: 6, marginTop: 14 }}><Clock size={14} /> I'll nudge you around {fmtSlot(slot)}{slot.learned ? " — that's when you usually learn" : ""}</p>
-              )}
             </motion.section>
           </Rise>
         ) : (
@@ -153,7 +116,7 @@ export function HomeScreen() {
 
       {streakInfo && <StreakSheet open={streakOpen} onClose={() => setStreakOpen(false)} s={streakInfo} />}
       {continuing.length > 0 && <Section title="Continue" items={continuing} />}
-      {recent.length > 0 && <Section title="Recently saved" items={recent} more={pending.length > 5 ? () => nav("/library") : undefined} />}
+      {recent.length > 0 && <Section title="Recently saved" items={recent} more={pending.length > 4 ? () => nav("/library") : undefined} />}
     </Page>
   );
 }

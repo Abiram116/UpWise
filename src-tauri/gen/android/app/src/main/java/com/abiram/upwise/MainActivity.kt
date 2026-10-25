@@ -110,8 +110,7 @@ class MainActivity : TauriActivity() {
     // wait for a bottom inset — nothing at the bottom of the page can shift when one arrives late
     // or flickers. (The status bar stays an overlay; the page handles the top itself.)
     // Bars are measured ignoring momentary visibility, and a bar that has been there can't
-    // "disappear" for a frame. If the WebView's own view scroll ever drifts (a keyboard that
-    // panned it), it's put back as soon as no keyboard is showing.
+    // "disappear" for a frame.
     val content = findViewById<android.view.View>(android.R.id.content)
     content.setBackgroundColor(navStripColor)
     ViewCompat.setOnApplyWindowInsetsListener(window.decorView) { _, insets ->
@@ -125,7 +124,6 @@ class MainActivity : TauriActivity() {
       safeBottom = 0f
       keyboardInset = maxOf(0, ime - navBottomPx) / density
       imeVisible = ime > 0
-      if (!imeVisible) webView?.let { if (it.scrollY != 0 || it.scrollX != 0) it.scrollTo(0, 0) }
       pushInsets()
       insets
     }
@@ -133,7 +131,6 @@ class MainActivity : TauriActivity() {
 
   override fun onResume() {
     super.onResume()
-    if (!imeVisible) webView?.let { if (it.scrollY != 0 || it.scrollX != 0) it.scrollTo(0, 0) }
     pushInsets()
   }
 
@@ -153,6 +150,11 @@ class MainActivity : TauriActivity() {
   override fun onWebViewCreate(webView: WebView) {
     super.onWebViewCreate(webView)
     this.webView = webView
+    // The page is an app, not a document: no zooming, and no "zoom out to fit" when something
+    // overflows sideways (that enlarged the viewport and pushed the nav bar off the screen).
+    webView.settings.setSupportZoom(false)
+    webView.settings.builtInZoomControls = false
+    webView.settings.loadWithOverviewMode = false
     // The WebView draws its own native scrollbar over the page; CSS can't reach it.
     webView.isVerticalScrollBarEnabled = false
     webView.isHorizontalScrollBarEnabled = false

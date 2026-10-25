@@ -50,7 +50,7 @@ function snapshot() {
   try { native = JSON.parse(window.AndroidNative?.diag?.() ?? "null"); } catch { /* ignore */ }
   return {
     innerH: innerHeight, innerW: innerWidth, scrollY: r1(scrollY),
-    vv: vv ? { h: r1(vv.height), top: r1(vv.offsetTop), scale: r1(vv.scale) } : null,
+    vv: vv ? { w: r1(vv.width), h: r1(vv.height), top: r1(vv.offsetTop), scale: r1(vv.scale) } : null,
     nav: nav ? { top: r1(nav.top), bottom: r1(nav.bottom), h: r1(nav.height) } : null,
     safeTop: css.getPropertyValue("--native-safe-top").trim(), safeBottom: css.getPropertyValue("--native-safe-bottom").trim(),
     native,
@@ -62,12 +62,12 @@ function snapshot() {
 function check(why: string) {
   if (document.visibilityState !== "visible") return;
   const s = snapshot();
-  const n = s.native as { webScrollY?: number; ime?: boolean } | null;
+  const n = s.native as { ime?: boolean } | null;
   const issues: string[] = [];
   if (s.nav && s.nav.h > 0 && Math.abs(s.nav.bottom - s.innerH) > 1) issues.push("nav-off-bottom");
   if (s.vv && (Math.abs(s.vv.top) > 1 || Math.abs(s.vv.scale - 1) > 0.01)) issues.push("visual-viewport");
   if (s.vv && !n?.ime && s.innerH - s.vv.h > 2) issues.push("viewport-short");
-  if (n && (n.webScrollY ?? 0) !== 0) issues.push("webview-scrolled");
+  if (s.vv && s.innerW - s.vv.w > 1) issues.push("layout-wider-than-screen");
   if (location.hash.startsWith("#/feed") && s.scrollY !== 0) issues.push("page-scrolled-on-feed");
   if (issues.length) diag("layout", { why, issues, ...s }, `layout:${issues.join(",")}:${s.nav?.bottom}:${s.innerH}`);
 }

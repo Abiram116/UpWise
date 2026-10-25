@@ -1,5 +1,7 @@
 *, *::before, *::after { box-sizing: border-box; }
 html, body, #root { height: 100%; }
+/* Nothing is ever allowed to make the page wider than the screen (see pageVariants in ui.tsx). */
+html, body, #root { overflow-x: clip; }
 html { -webkit-text-size-adjust: 100%; -webkit-tap-highlight-color: transparent; }
 
 /* This is a touch-first app — no visible scrollbar track anywhere, on any platform. Scrolling

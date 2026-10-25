@@ -16,7 +16,6 @@ import type { Item } from "../lib/types";
 import { Owl } from "../components/BrandMark";
 import { celebrateDone } from "../components/Celebrate";
 import { FinishSheet } from "../components/FinishSheet";
-import { FormatIcon } from "../components/ItemCard";
 import { ItemThumb } from "../components/CoverArt";
 import { useSessionStore } from "../components/SessionBar";
 import { Pill, Skeleton, spring, useToast } from "../components/ui";
@@ -249,9 +248,7 @@ function FeedCard({ pos, item, near, busy, hint, reference, onLearn, onOpen, onS
       </button>
       <div className="feed-info">
         <p className="feed-meta">
-          <span className="row" style={{ gap: 5 }}><FormatIcon item={item} size={14} />{FORMAT_LABEL[format]}</span>
-          {!reference && format !== "link" && <span>~{fmtMinutes(est(item))}</span>}
-          {item.category?.name && <span>{item.category.name}</span>}
+          <span>{[FORMAT_LABEL[format], !reference && format !== "link" ? `~${fmtMinutes(est(item))}` : null, item.category?.name].filter(Boolean).join(" · ")}</span>
           {item.status === "in_progress" && <span className="feed-tag">In progress</span>}
         </p>
         <h2 className="feed-title clamp-3">{item.title ?? item.url}</h2>

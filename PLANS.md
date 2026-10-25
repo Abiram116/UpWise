@@ -119,6 +119,12 @@ Living backlog of things to build next. Nothing here is built yet — this is th
 - [x] **New icon.** Minimal owl — two eyes glancing up-right, apricot beak, on sage.
 - Next: Gemini Nano (ML Kit GenAI Prompt API) for instant offline cheer/Today lines once it can be tested on the device.
 
+### v1.5.1 — the nav bar bug, actually fixed; less clutter
+
+- [x] **Nav bar root cause** (found with on-device diagnostics): since v1.2.0 pages slid in 32 px sideways; the WebView answered the momentary overflow by enlarging the whole viewport, pushing the fixed nav bar below the screen. Pages now fade and rise, nothing may widen the page (`overflow-x: clip`), the viewport can't rescale (min/max scale 1) and the WebView has zoom off.
+- [x] Removed v1.5.0's native scroll "heal", which reset the page to the top on every resume.
+- [x] **Less clutter**: the Today pick card is image, title, one line and Start; the streak pill shows one number; three recent saves; every list and feed card has one "Type · time · area" line; Progress opens with two lines.
+
 ### v1.5.0 — a real pager for Scroll, a nav bar that can't move
 
 - [x] **Scroll is a pager, not a scroll-snap list** (src/lib/usePager.ts): the track follows your finger 1:1, a flick of any size or a drag past ~18% moves exactly one card, and the settle is a compositor Web Animation. No browser fling→snap hand-off left to stall. Learned/Skip changes wait until the card has landed. Wheel and arrow keys on the laptop.
